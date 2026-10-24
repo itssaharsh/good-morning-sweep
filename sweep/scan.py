@@ -29,9 +29,20 @@ def pending(con):
     return one
 
 
-def store(con, sha1, v):
-    """Write one answer for every file with these bytes."""
+def lookalikes(con, todo):
+    """{sha1 asked: [other sha1s that look the same]}: a forward re-sent with new compression is asked about once."""
+    rep = {}
+    for g in checks.near_groups(todo):
+        g = sorted(g, key=lambda r: -r["bytes"])
+        rep[g[0]["sha1"]] = [r["sha1"] for r in g[1:]]
+    return rep
+
+
+def store(con, sha1, v, also=()):
+    """Write one answer for every file with these bytes (and for look-alikes, marked as copied)."""
     ids = [r["id"] for r in con.execute("SELECT id FROM files WHERE sha1=?", (sha1,))]
+    for s2 in also:
+        ids += [r["id"] for r in con.execute("SELECT id FROM files WHERE sha1=?", (s2,))]
     with con:
         for fid in ids:
             con.execute("""INSERT INTO verdicts(file_id, kind, words, people, screen, raw, ms, error, model, at)
@@ -47,6 +58,9 @@ def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print
     todo = pending(con)
     if limit:
         todo = todo[:limit]
+    same = lookalikes(con, todo)
+    skip = {s for v in same.values() for s in v}
+    todo = [r for r in todo if r["sha1"] not in skip]
     total = len(todo)
     if not total:
         log("Nothing left to look at.")
@@ -60,7 +74,7 @@ def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print
                  "error": "could not open the picture"}
         else:
             v = classify(media.jpeg_bytes(im), url=url, log=log)
-        store(con, r["sha1"], v)
+        store(con, r["sha1"], v, also=same.get(r["sha1"], ()))
         done += 1
         ms_sum += v["ms"] or 0
         if done % every == 0 or done == total:

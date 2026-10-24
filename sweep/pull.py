@@ -1,7 +1,11 @@
 """Copy the phone's picture folders to the laptop (this copy is also the backup) and index each file."""
+import shutil
 from pathlib import Path
 
 from . import media
+
+
+MARGIN = 5 * 10**9   # always leave this much free on the laptop
 
 
 def folder_label(label, phone_path, root):
@@ -28,7 +32,14 @@ def pull(con, phone, mirror, log=print, only=None):
 
         missing = [r for r in remote if not (local_of(r[0]).exists() and local_of(r[0]).stat().st_size == r[1])]
         size = sum(r[1] for r in remote)
+        need = sum(r[1] for r in missing)
         log(f"{label:12s} {len(remote):6d} files  {size / 1e9:6.2f} GB  ({len(missing)} to copy)  {root}")
+        mirror.mkdir(parents=True, exist_ok=True)
+        free = shutil.disk_usage(mirror).free
+        if need > free - MARGIN:
+            log(f"  skipped: copying it needs {need / 1e9:.1f} GB and the laptop has {free / 1e9:.1f} GB free "
+                f"(keeping {MARGIN / 1e9:.0f} GB spare). Free some space, or run with --only to pick folders.")
+            continue
         if missing and (len(missing) > 40 or len(missing) > len(remote) / 2):
             phone.pull_dir(root, base)
         else:

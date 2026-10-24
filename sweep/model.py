@@ -100,6 +100,7 @@ def ask(jpeg, url=MODEL_URL, timeout=300, max_tokens=90):
         ],
         "temperature": 0,
         "max_tokens": max_tokens,
+        "chat_template_kwargs": {"enable_thinking": False},  # Gemma 4 thinks aloud after a system message otherwise
     }
     req = urllib.request.Request(f"{url}/v1/chat/completions", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
