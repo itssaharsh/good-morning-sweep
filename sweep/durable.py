@@ -37,11 +37,8 @@ class Item:
 def next_batch(db_path: str, n: int) -> list:
     con = db.connect(db_path)
     try:
-        todo = scan.pending(con)
-        same = scan.lookalikes(con, todo)
-        skip = {s for v in same.values() for s in v}
-        todo = [r for r in todo if r["sha1"] not in skip][:n]
-        return [Item(r["sha1"], r["local_path"], list(same.get(r["sha1"], ()))) for r in todo]
+        todo = scan.pending(con)[:n]   # answers are shared between identical files only
+        return [Item(r["sha1"], r["local_path"], []) for r in todo]
     finally:
         con.close()
 

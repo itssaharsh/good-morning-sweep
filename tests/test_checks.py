@@ -33,3 +33,12 @@ def test_blur_and_dark_scores(tmp_path):
     assert dark < checks.DARK_FLAG and sharp < checks.BLUR_FLAG
     s2, d2 = media.blur_and_dark(Image.open(photo(tmp_path / "p.jpg")))
     assert s2 > checks.BLUR_FLAG and d2 > checks.DARK_FLAG
+
+
+def test_flat_pictures_are_not_look_alikes(con, tmp_path):
+    from PIL import Image
+    Image.new("RGB", (300, 300), (3, 3, 3)).save(tmp_path / "black.jpg")
+    Image.new("RGB", (300, 300), (250, 250, 250)).save(tmp_path / "white.png")
+    add(con, tmp_path / "black.jpg", "camera"); add(con, tmp_path / "white.png", "screenshots")
+    pull.index(con)
+    assert checks.near_groups(con.execute("SELECT * FROM files").fetchall()) == []

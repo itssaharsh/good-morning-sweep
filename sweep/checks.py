@@ -41,11 +41,18 @@ def exact_groups(rows):
     return {k: v for k, v in by.items() if len(v) > 1}
 
 
+def informative(dh):
+    """A flat picture (black, white, one colour) has almost no bits set in its difference hash, so every flat picture
+    looks like every other one. Those are left out of look-alike groups."""
+    n = bin(int(dh, 16)).count("1")
+    return 8 <= n <= 56
+
+
 def near_groups(rows, bits=NEAR_BITS, chunk=512):
     """Lists of rows whose pictures look the same (dhash within `bits`), one row per sha1, groups of 2+."""
     uniq, seen = [], set()
     for r in rows:
-        if r["dhash"] and r["sha1"] not in seen:
+        if r["dhash"] and informative(r["dhash"]) and r["sha1"] not in seen:
             seen.add(r["sha1"])
             uniq.append(r)
     n = len(uniq)

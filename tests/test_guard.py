@@ -32,7 +32,7 @@ def test_forward_set_aside_only_when_its_words_were_read():
 
 
 def test_unreadable_forward_that_arrived_twice_goes():
-    rows = [row(1, dh="00000000000000ff"), row(2, dh="00000000000000fe")]   # look the same
+    rows = [row(1, dh="0000ffff0000ffff"), row(2, dh="0000ffff0000fffe")]   # look the same
     out = guard.decide(rows, {1: v("greeting"), 2: v("greeting")}, {})
     assert out[1][0] == "forwards" and "arrived 2 times" in out[1][1]
 
@@ -71,3 +71,16 @@ def test_blurry_needs_code_and_model_to_agree():
 def test_model_alone_baseline_throws_away_any_forward_label():
     assert guard.model_alone(v("greeting", "Happy Diwali", people=True))
     assert not guard.model_alone(v("photo"))
+
+
+def test_arrived_again_counts_only_lookalikes_that_are_forwards_too():
+    rows = [row(1, dh="00000000ffffffff"), row(2, dh="00000000fffffffe")]   # look the same
+    out = guard.decide(rows, {1: v("greeting"), 2: v("photo", people=True)}, {})
+    assert 1 not in out and 2 not in out
+
+
+def test_screenshot_type_falls_back_to_its_words():
+    now = dt.datetime(2026, 10, 25).timestamp()
+    rows = [row(1, folder="screenshots", mtime=now - 50 * 86400)]
+    out = guard.decide(rows, {1: v("news", "Amazon Your package was delivered")}, {}, today=now)
+    assert out[1][0] == "screenshots" and "Delivery tracking" in out[1][1]

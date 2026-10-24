@@ -60,7 +60,7 @@ PAGE = r"""<!doctype html>
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17140f;--card:#211d17;--ink:#f3ede4;
 --soft:#a99d8d;--line:#3a332a;--sun:#f0a050;--sun-ink:#f6c48f;--keep:#5fc497;--del:#ef7d66;--shadow:none}}
 *{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--ink);
-font:17px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
+font:17px/1.45 "Segoe UI","Nirmala UI","Noto Sans Devanagari","Noto Sans",system-ui,-apple-system,sans-serif}
 header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);
 backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .bar{max-width:1180px;margin:0 auto;padding:14px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
@@ -82,6 +82,7 @@ border:2px solid transparent;transition:border-color .15s,opacity .15s}
 .tile.sel{border-color:color-mix(in srgb,var(--del) 70%,transparent)}
 .tile:not(.sel){opacity:.72}.tile.gone{opacity:.35;pointer-events:none}
 .tile .ph{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--line);cursor:pointer}
+.tile.shot .ph{object-position:top}
 .badge{position:absolute;top:8px;left:8px;padding:3px 9px;border-radius:999px;font-size:13px;font-weight:650;color:#fff}
 .sel .badge{background:var(--del)}.tile:not(.sel) .badge{background:var(--keep)}
 .vid{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:8px;padding:2px 7px;font-size:12px}
@@ -103,7 +104,7 @@ const DATA = __DATA__;
 const STATIC = __STATIC__;
 const GROUPS = DATA.groups, S = DATA.summary;
 let items = DATA.items;
-const gb = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : Math.max(1, Math.round(b/1e6))+' MB';
+const gb = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? Math.round(b/1e6)+' MB' : Math.max(1, Math.round(b/1e3))+' KB';
 const src = it => STATIC ? DATA.thumbs[it.id] : '/t/'+it.id+'.jpg';
 function render(){
   const g = document.getElementById('groups'); g.innerHTML='';
@@ -119,7 +120,7 @@ function render(){
     const grid = sec.querySelector('.grid');
     for (const it of list.slice(0, 600)){
       const t = document.createElement('div');
-      t.className = 'tile'+(it.sel?' sel':'')+(it.gone?' gone':''); t.dataset.id = it.id;
+      t.className = 'tile'+(it.sel?' sel':'')+(it.gone?' gone':'')+(key==='screenshots'?' shot':''); t.dataset.id = it.id;
       t.innerHTML = `<img class="ph" loading="lazy" alt="" src="${src(it)}"><span class="badge">${it.gone?'Deleted':(it.sel?'Delete':'Keep')}</span>
         ${it.video?'<span class="vid">video</span>':''}<div class="why"></div>`;
       t.querySelector('.why').textContent = it.reason;
@@ -175,7 +176,7 @@ def page(con, static=False, thumb_dir=None, buckets=None):
     return PAGE.replace("__DATA__", blob).replace("__STATIC__", "true" if static else "false")
 
 
-def serve(con_factory, workspace, apply_fn, port=8765, log=print):
+def serve(con_factory, workspace, apply_fn, port=8777, log=print):
     thumbs = Path(workspace) / "thumbs"
     lock = threading.Lock()
 

@@ -68,13 +68,13 @@ def test_unreadable_answers_become_unsure(monkeypatch):
     assert out["kind"] is None and out["error"]
 
 
-def test_lookalikes_are_asked_once(con, tmp_path):
+def test_lookalikes_are_asked_separately(con, tmp_path):
+    """A photo and the same photo with "Happy Diwali" written on it look alike; each gets its own answer."""
     from PIL import Image
     a = card(tmp_path / "a.jpg", seed=4)
-    Image.open(a).save(tmp_path / "b.jpg", quality=55)      # same card, compressed again
+    Image.open(a).save(tmp_path / "b.jpg", quality=55)
     add(con, a, "wa_images"); add(con, tmp_path / "b.jpg", "wa_images")
     pull.index(con)
     f = fake(['{"kind":"greeting","words":"Good Morning","people":false,"screen":""}'])
     scan.run(con, classify=f, log=lambda *a: None)
-    assert len(f.calls) == 1
-    assert con.execute("SELECT COUNT(*) FROM verdicts WHERE kind='greeting'").fetchone()[0] == 2
+    assert len(f.calls) == 2

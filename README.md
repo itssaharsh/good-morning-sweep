@@ -53,7 +53,7 @@ scripts/start-model.sh            # Gemma 4 E2B on 127.0.0.1:8089 (set MODEL, MM
 # on the phone: Settings > About phone > tap Build number 7 times; Developer options > USB debugging on; plug in; Allow
 sweep devices                     # the phone, its Android version and free space
 sweep run                         # copy, index, let Gemma look, compute suggestions (hours; stop and re-run any time)
-sweep review                      # http://127.0.0.1:8765 : tap to keep, then "Delete from phone"
+sweep review                      # http://127.0.0.1:8777 : tap to keep, then "Delete from phone"
 sweep report                      # what was found and freed
 ```
 

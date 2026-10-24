@@ -58,9 +58,7 @@ def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print
     todo = pending(con)
     if limit:
         todo = todo[:limit]
-    same = lookalikes(con, todo)
-    skip = {s for v in same.values() for s in v}
-    todo = [r for r in todo if r["sha1"] not in skip]
+    same = {}   # answers are shared between identical files only (a look-alike can be the same photo with words added)
     total = len(todo)
     if not total:
         log("Nothing left to look at.")

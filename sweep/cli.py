@@ -101,6 +101,8 @@ def cmd_import(args):
                 continue
             rel = p.relative_to(root)
             folder = rel.parts[0] if len(rel.parts) > 1 else "wa_images"
+            if len(rel.parts) > 2 and rel.parts[1] == "Sent" and folder in ("wa_images", "wa_video"):
+                folder = folder.replace("wa_images", "wa_sent").replace("wa_video", "wa_video_sent")
             st = p.stat()
             con.execute("INSERT INTO files(phone_path, local_path, folder, bytes, mtime) VALUES(?,?,?,?,?) "
                         "ON CONFLICT(phone_path) DO NOTHING", (f"/import/{rel}", str(p), folder, st.st_size, st.st_mtime))
@@ -210,7 +212,7 @@ def main(argv=None):
     p.add_argument("--temporal", default="localhost:7233"); p.set_defaults(f=cmd_scan)
     sub.add_parser("suggest").set_defaults(f=cmd_suggest)
     p = sub.add_parser("run"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_run)
-    p = sub.add_parser("review"); p.add_argument("--port", type=int, default=8765); p.add_argument("--static")
+    p = sub.add_parser("review"); p.add_argument("--port", type=int, default=8777); p.add_argument("--static")
     p.set_defaults(f=cmd_review)
     p = sub.add_parser("apply"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(f=cmd_apply)
     sub.add_parser("report").set_defaults(f=cmd_report)

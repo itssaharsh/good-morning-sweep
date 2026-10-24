@@ -24,7 +24,7 @@ K is one of:
 - "ad": an advertisement, offer, flyer or promotion
 - "photo": a real photograph someone took (people, places, food, pets, events)
 - "document": an ID card, bill, receipt, prescription, ticket, form, letter, certificate or handwritten note
-- "screenshot": a screenshot of a phone or computer screen
+- "screenshot": a screenshot of a phone or computer screen (status bar, app bars, chat bubbles, notifications); use this whatever the screen shows
 - "accidental": a blurry, black, pocket or floor shot taken by mistake
 - "other": none of these
 W: the main words printed on the picture, copied exactly as written, in their own language and script (at most 15 words), or "" if there are none.

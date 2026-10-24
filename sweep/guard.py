@@ -3,6 +3,7 @@
 The model never deletes anything. It only describes a picture. These rules decide, and each one writes its reason in
 words the person reviewing can check against the picture. Anything the rules are unsure about is kept."""
 import datetime as dt
+import re
 
 from . import checks
 from .wordlist import forward_words, has_words
@@ -22,6 +23,23 @@ BUCKETS = [
     ("check", "Your call", False),
 ]
 PRESELECT = {b: p for b, _, p in BUCKETS}
+
+
+SCREEN_WORDS = [
+    ("otp", re.compile(r"\botp\b|one[- ]time|verification code|\bcode is\b|do not share", re.I)),
+    ("payment", re.compile(r"payment|paid|upi|₹|\brs\.?\s?\d|transaction|successful|debited|credited", re.I)),
+    ("delivery", re.compile(r"deliver|package|shipped|out for delivery|order|arriving|tracking", re.I)),
+]
+
+
+def screen_type(v):
+    """The model's screenshot type, else one read off the words it quoted."""
+    if v["screen"] in SCREEN_NAMES:
+        return v["screen"]
+    for name, rx in SCREEN_WORDS:
+        if rx.search(v["words"] or ""):
+            return name
+    return ""
 
 
 def short(words, n=70):
@@ -60,9 +78,11 @@ def decide(rows, verdicts, chk, today=None):
     near = checks.near_groups(rows)
     near_of = {}
     for g in near:
-        total = sum(copies_of.get(r["id"], 1) for r in g)
+        fwd = [r for r in g if verdicts.get(r["id"]) and verdicts[r["id"]]["kind"] in FORWARD_KINDS]
+        total = sum(copies_of.get(r["id"], 1) for r in fwd)
         for r in g:
-            arrivals[r["id"]] = max(arrivals[r["id"]], total)
+            if r in fwd:
+                arrivals[r["id"]] = max(arrivals[r["id"]], total)
             near_of[r["id"]] = g
 
     for r in rows:
@@ -100,18 +120,25 @@ def decide(rows, verdicts, chk, today=None):
             continue
 
         # Rule S1: old screenshots of one-time codes, payments and deliveries: probably done with. Never ticked.
-        if (folder == "screenshots" or kind == "screenshot") and v and v["screen"] in SCREEN_NAMES:
+        if (folder == "screenshots" or kind == "screenshot") and v and kind not in {"photo", "document"}:
+            st = screen_type(v)
             age = (today - (r["mtime"] or today)) / 86400
-            if age >= OLD_SCREEN_DAYS:
+            if st and age >= OLD_SCREEN_DAYS:
                 when = dt.datetime.fromtimestamp(r["mtime"]).strftime("%d %b %Y")
-                out[fid] = ("screenshots", f"{SCREEN_NAMES[v['screen']].capitalize()} screenshot from {when}",
+                out[fid] = ("screenshots", f"{SCREEN_NAMES[st].capitalize()} screenshot from {when}: “{short(words, 50)}”",
                             "S1-old-screenshot", None)
             continue
 
         # Rule N1: a photo that looks almost the same as a sharper one that is kept. Never ticked.
         g = near_of.get(fid)
         if g and kind in {"photo", None} and folder in {"camera", "wa_images"}:
-            best = sorted(g, key=lambda x: checks.keeper_key(x, sharp.get(x["id"])))[0]
+            def photo_like(x):   # only a photo is "the same photo": never a card made from one
+                vx = verdicts.get(x["id"])
+                return x["folder"] in {"camera", "wa_images"} and (vx["kind"] if vx else None) in {"photo", None}
+            peers = [x for x in g if photo_like(x)]
+            if len(peers) < 2:
+                continue
+            best = sorted(peers, key=lambda x: checks.keeper_key(x, sharp.get(x["id"])))[0]
             if best["id"] != fid and best["id"] not in out:
                 out[fid] = ("similar", f"Looks almost the same as {_name(best)}, which is kept", "N1-near-copy",
                             best["id"])
