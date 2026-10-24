@@ -159,6 +159,11 @@ class Phone:
         finally:
             self.run_(["shell", f"rm -f {remote}"], 60)
 
+    def can_hash(self):
+        """True when the phone has sha1sum (toybox, Android 6+), which every deletion relies on."""
+        out = self.shell("sha1sum /system/build.prop 2>/dev/null || echo NOSHA")
+        return len(out.split()[0]) == 40 if out.strip() and not out.startswith("NOSHA") else False
+
     def delete(self, items, scratch_dir, batch=400, on_batch=None):
         """Delete files on the phone, each only if its SHA-1 on the phone still matches the backed-up copy.
         items: [(phone path, sha1)]. Returns {path: (ok, message)}; on_batch(result_so_far) after each batch."""

@@ -41,14 +41,24 @@ def summary(con):
             "free_before": get_meta(con, "free_before"), "free_after": get_meta(con, "free_after")}
 
 
-def save(con, delete_ids):
-    """Store a decision for every suggestion: delete for the ticked ones, keep for the rest."""
+def save(con, delete_ids, keep_ids=None):
+    """Store the person's decisions. delete_ids: the ticked pictures they saw. keep_ids: the ones they saw and
+    unticked. Pictures they never scrolled to get no decision, so they stay on the phone and keep their tick for
+    next time. Without keep_ids (the command line), every other suggestion is recorded as keep."""
     ids = [r["file_id"] for r in con.execute("SELECT file_id FROM suggestions")]
     dels = set(int(i) for i in delete_ids)
+    keeps = None if keep_ids is None else set(int(i) for i in keep_ids)
     with con:
         for fid in ids:
+            if fid in dels:
+                act = "delete"
+            elif keeps is None or fid in keeps:
+                act = "keep"
+            else:
+                con.execute("DELETE FROM decisions WHERE file_id=? AND action='delete'", (fid,))
+                continue
             con.execute("INSERT INTO decisions(file_id, action, at) VALUES(?,?,?) ON CONFLICT(file_id) DO UPDATE "
-                        "SET action=excluded.action, at=excluded.at", (fid, "delete" if fid in dels else "keep", now()))
+                        "SET action=excluded.action, at=excluded.at", (fid, act, now()))
     set_meta(con, "review_saved_at", now())
     return len(dels & set(ids))
 
@@ -83,6 +93,7 @@ section{margin-top:28px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-top:14px}
 .tile{position:relative;background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;
 border:2px solid transparent;transition:border-color .15s,opacity .15s}
+.tile.broken .ph{opacity:.3}
 .tile.sel{border-color:color-mix(in srgb,var(--del) 70%,transparent)}
 .tile:not(.sel){opacity:.72}.tile.gone{opacity:.35;pointer-events:none}
 .tile .ph{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--line);cursor:pointer}
@@ -154,7 +165,11 @@ function render(){
       t.querySelector('.ph').onclick = () => { if (it.gone) return; it.sel = !it.sel; paint(t, it); totals(); };
       t.querySelector('.ph').oncontextmenu = e => {e.preventDefault(); zoom(it);};
       t.querySelector('.zoom').onclick = () => zoom(it);
-      paint(t, it); tiles.set(t, it); if (seenObs) seenObs.observe(t); else it.seen = true;
+      paint(t, it); tiles.set(t, it);
+      const im = t.querySelector('.ph');
+      const watch = () => { if (seenObs) seenObs.observe(t); else { it.seen = true; totals(); } };
+      if (im.complete && im.naturalWidth) watch(); else { im.addEventListener('load', watch, {once:true}); }
+      im.addEventListener('error', () => { t.classList.add('broken'); });
       grid.appendChild(t);
     }
     const allBtn = sec.querySelector('.all');
@@ -175,7 +190,7 @@ document.getElementById('go').onclick = async () => {
   if (!confirm(`Delete ${sel.length} pictures from the phone? The laptop keeps a copy of each.`)) return;
   const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Deleting…';
   const r = await fetch('/api/apply', {method:'POST', headers:{'X-Sweep-Token': DATA.token},
-    body: JSON.stringify({delete: sel.map(i=>i.id), suggested_at: DATA.suggested_at})});
+    body: JSON.stringify({delete: sel.map(i=>i.id), keep: items.filter(i=>!i.sel && !i.gone && i.seen).map(i=>i.id), suggested_at: DATA.suggested_at})});
   const j = await r.json(); b.textContent = 'Delete from phone';
   if (!r.ok){ toast(j.error || 'Something went wrong'); totals(); return; }
   const fresh = new Map(j.items.map(x=>[x.id,x]));
@@ -222,7 +237,12 @@ def serve(con_factory, workspace, apply_fn, port=8777, log=print):
             self.end_headers()
             self.wfile.write(body)
 
+        def host_ok(self):   # refuse DNS-rebinding pages: only this machine's own names
+            return self.headers.get("Host", "") in {f"127.0.0.1:{port}", f"localhost:{port}"}
+
         def do_GET(self):
+            if not self.host_ok():
+                return self.send(421, b"wrong host", "text/plain")
             path = urllib.parse.urlparse(self.path).path
             con = con_factory()
             try:
@@ -239,6 +259,8 @@ def serve(con_factory, workspace, apply_fn, port=8777, log=print):
                 con.close()
 
         def do_POST(self):
+            if not self.host_ok():
+                return self.send(421, b"{}", "application/json")
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
             con = con_factory()
@@ -252,7 +274,7 @@ def serve(con_factory, workspace, apply_fn, port=8777, log=print):
                                                           "opened. Reload it and look again."}).encode(),
                                          "application/json")
                     with lock:
-                        save(con, body.get("delete", []))
+                        save(con, body.get("delete", []), body.get("keep", []))
                         res = apply_fn(con)
                     return self.send(200, json.dumps(dict(res, items=items(con))).encode(), "application/json")
                 self.send(404, b"{}", "application/json")

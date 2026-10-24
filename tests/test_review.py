@@ -31,3 +31,16 @@ def test_static_demo_never_includes_family_buckets(con, tmp_path):
     con.commit()
     html = review.page(con, static=True, thumb_dir=tmp_path / "t", buckets=review.PUBLIC_BUCKETS)
     assert "fwd" in html and "a family photo" not in html
+
+
+def test_pictures_never_scrolled_to_get_no_decision(con, tmp_path):
+    a = add(con, card(tmp_path / "a.jpg"), "wa_images")
+    b = add(con, card(tmp_path / "b.jpg", seed=5), "wa_images")
+    c = add(con, card(tmp_path / "c.jpg", seed=6), "wa_images")
+    con.executemany("INSERT INTO suggestions(file_id,bucket,reason,rule,preselected) VALUES(?,?,?,?,?)",
+                    [(i, "forwards", "r", "F1", 1) for i in (a, b, c)])
+    con.commit()
+    review.save(con, [a], keep_ids=[b])          # c was never on screen
+    acts = dict(con.execute("SELECT file_id, action FROM decisions").fetchall())
+    assert acts == {a: "delete", b: "keep"}
+    assert [i["sel"] for i in review.items(con) if i["id"] == c] == [True]   # still ticked for next time

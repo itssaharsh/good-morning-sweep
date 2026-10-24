@@ -85,6 +85,9 @@ def apply(con, phone, scratch_dir=None, log=print, dry_run=False):
         return {"deleted": 0, "freed": 0, "held": len(held), "failed": 0,
                 "would_delete": len(ready), "would_free": sum(r["bytes"] for r in ready)}
 
+    if hasattr(phone, "can_hash") and not phone.can_hash():
+        raise WrongPhone("This phone has no sha1sum, so the tool cannot confirm each file before deleting it. "
+                         "Nothing was deleted.")
     before = phone.free_bytes()
     if not get_meta(con, "free_before"):
         set_meta(con, "free_before", before)

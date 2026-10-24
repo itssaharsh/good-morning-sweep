@@ -125,3 +125,12 @@ def test_an_imported_folder_can_never_delete(con, tmp_path):
     review.save(con, [a])
     with pytest.raises(WrongPhone):
         apply(con, ph, log=lambda *a: None)
+
+
+def test_a_phone_without_sha1sum_deletes_nothing(con, tmp_path):
+    (a, b), ph = setup(con, tmp_path)
+    review.save(con, [a])
+    ph.can_hash = lambda: False
+    with pytest.raises(WrongPhone, match="sha1sum"):
+        apply(con, ph, log=lambda *a: None)
+    assert ph.deleted == []
