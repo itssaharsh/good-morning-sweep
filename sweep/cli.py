@@ -159,8 +159,11 @@ def cmd_run(args):
 def cmd_review(args):
     con, ws, _ = open_db(args, args.serial)
     if args.static:
+        if args.all_buckets:
+            print("Including every group. Only do this for a demo set with no family photos in it.")
         Path(args.static).write_text(review.page(con, static=True, thumb_dir=ws / "thumbs" / "d",
-                                                 buckets=review.PUBLIC_BUCKETS), encoding="utf-8")
+                                                 buckets=None if args.all_buckets else review.PUBLIC_BUCKETS,
+                                                 note=args.note), encoding="utf-8")
         print(f"Wrote {args.static}")
         return
     dbpath = ws / "sweep.db"
@@ -213,6 +216,8 @@ def main(argv=None):
     sub.add_parser("suggest").set_defaults(f=cmd_suggest)
     p = sub.add_parser("run"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_run)
     p = sub.add_parser("review"); p.add_argument("--port", type=int, default=8777); p.add_argument("--static")
+    p.add_argument("--all-buckets", action="store_true", help="static only: every group, for a demo set with no family photos")
+    p.add_argument("--note", help="static only: a line of HTML shown above the page")
     p.set_defaults(f=cmd_review)
     p = sub.add_parser("apply"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(f=cmd_apply)
     sub.add_parser("report").set_defaults(f=cmd_report)

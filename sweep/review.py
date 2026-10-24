@@ -72,6 +72,8 @@ button{font:inherit;border:0;border-radius:12px;cursor:pointer}
 .go{background:var(--del);color:#fff;padding:12px 18px;font-weight:650}.go:disabled{opacity:.45;cursor:not-allowed}
 main{max-width:1180px;margin:0 auto;padding:8px 16px 80px}
 .intro{color:var(--soft);margin:16px 0 4px;max-width:70ch}
+.demo{margin:16px 0 0;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--sun) 14%,var(--card));
+color:var(--ink);max-width:80ch;font-size:15px}.demo a{color:var(--sun-ink)}
 section{margin-top:28px}
 .sh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
 .sh h2{margin:0;font-size:21px}.sh .meta{color:var(--soft)}
@@ -97,7 +99,7 @@ padding:12px 18px;border-radius:12px;display:none;max-width:90vw}
 <header><div class="bar"><div class="brand"><span class="sun"></span>Good Morning Sweep</div>
 <div class="total"><b id="tot">0 GB</b><small id="totn">to free</small></div>
 <button class="go" id="go">Delete from phone</button></div></header>
-<main><p class="intro" id="intro"></p><div id="groups"></div></main>
+<main><p class="demo" id="demo" hidden></p><p class="intro" id="intro"></p><div id="groups"></div></main>
 <dialog id="dlg"><img id="big" alt=""><p id="bigwhy"></p></dialog><div class="toast" id="toast"></div>
 <script>
 const DATA = __DATA__;
@@ -106,6 +108,7 @@ const GROUPS = DATA.groups, S = DATA.summary;
 let items = DATA.items;
 const gb = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? Math.round(b/1e6)+' MB' : Math.max(1, Math.round(b/1e3))+' KB';
 const src = it => STATIC ? DATA.thumbs[it.id] : '/t/'+it.id+'.jpg';
+if (STATIC && DATA.note){ const d=document.getElementById('demo'); d.hidden=false; d.innerHTML=DATA.note; }
 function render(){
   const g = document.getElementById('groups'); g.innerHTML='';
   document.getElementById('intro').textContent =
@@ -162,9 +165,9 @@ render();
 PUBLIC_BUCKETS = ("forwards",)
 
 
-def page(con, static=False, thumb_dir=None, buckets=None):
+def page(con, static=False, thumb_dir=None, buckets=None, note=None):
     its = items(con, buckets)
-    data = {"groups": [[b, t] for b, t, _ in guard.BUCKETS], "summary": summary(con), "items": its}
+    data = {"groups": [[b, t] for b, t, _ in guard.BUCKETS], "summary": summary(con), "items": its, "note": note}
     if static:
         data["thumbs"] = {}
         for it in its:
