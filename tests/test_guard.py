@@ -84,3 +84,55 @@ def test_screenshot_type_falls_back_to_its_words():
     rows = [row(1, folder="screenshots", mtime=now - 50 * 86400)]
     out = guard.decide(rows, {1: v("news", "Amazon Your package was delivered")}, {}, today=now)
     assert out[1][0] == "screenshots" and "Delivery tracking" in out[1][1]
+
+
+# --- review findings, 24 Oct (B2, B3, M5) ---
+
+def test_any_forward_kind_with_people_is_your_call():
+    """A newspaper clipping about a grandchild ("news" + real people) must not be ticked."""
+    out = guard.decide([row(1)], {1: v("news", "Dainik Bhaskar: Rohan tops district board exam", people=True)}, {})
+    assert out[1][0] == "check"
+
+
+def test_unknown_people_counts_as_maybe_people():
+    out = guard.decide([row(1)], {1: v("greeting", "Shubh Deepawali Sharma parivaar", people=None)}, {})
+    assert out[1][0] == "check"
+
+
+def test_a_dark_video_is_never_called_blurry():
+    rows = [dict(row(1, folder="camera"), phone_path="/p/VID_20261024.mp4")]
+    out = guard.decide(rows, {1: v("accidental")}, {1: {"blur": 3.0, "dark": 12.0}})
+    assert out == {}
+
+
+def test_blurry_needs_the_model_to_say_no_people():
+    rows = [row(1, folder="camera")]
+    out = guard.decide(rows, {1: v("accidental", people=None)}, {1: {"blur": 3.0, "dark": 12.0}})
+    assert out == {}
+
+
+def test_copies_of_a_forward_all_go_as_forwards():
+    """When the kept copy is itself a forward, its copies are forwards too, not 'copies of a kept file'."""
+    rows = [row(1, sha="x"), row(2, folder="wa_sent", sha="x")]
+    vs = {1: v("greeting", "Good Morning"), 2: v("greeting", "Good Morning")}
+    out = guard.decide(rows, vs, {})
+    assert out[1][0] == "forwards" and out[2][0] == "forwards"
+
+
+def test_copies_of_a_family_photo_keep_exactly_one():
+    rows = [row(1, sha="x"), row(2, folder="wa_sent", sha="x"), row(3, folder="wa_sent", sha="x")]
+    vs = {i: v("photo", people=True) for i in (1, 2, 3)}
+    out = guard.decide(rows, vs, {})
+    assert 1 not in out and out[2][0] == "copies" and out[3][0] == "copies" and out[2][3] == 1
+
+
+def test_build_ignores_files_already_deleted_or_gone(con, tmp_path):
+    from conftest import add, card
+    from sweep import pull
+    a = add(con, card(tmp_path / "a.jpg"), "wa_images")
+    pull.index(con)
+    con.execute("INSERT INTO verdicts(file_id, kind, words, people, screen) VALUES(?,?,?,?,?)",
+                (a, "greeting", "Good Morning", 0, ""))
+    con.execute("INSERT INTO deletions(file_id, ok, message, at) VALUES(?,1,'deleted',0)", (a,))
+    con.commit()
+    assert guard.build(con) == {}

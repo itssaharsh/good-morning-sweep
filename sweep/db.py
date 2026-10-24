@@ -68,6 +68,12 @@ def connect(path):
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(files)")}
+    if "gone" not in cols:   # 1 when the file was missing from the phone's latest listing
+        con.execute("ALTER TABLE files ADD COLUMN gone INTEGER NOT NULL DEFAULT 0")
+    if "root" not in cols:   # the phone folder it was copied from
+        con.execute("ALTER TABLE files ADD COLUMN root TEXT")
+    con.commit()
     return con
 
 

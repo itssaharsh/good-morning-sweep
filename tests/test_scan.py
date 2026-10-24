@@ -48,9 +48,10 @@ def test_camera_photos_go_to_the_model_only_when_blurry_or_black(con, tmp_path):
     assert names == ["black.jpg"]
 
 
-def test_parse_is_lenient():
-    assert model.parse('```json\n{"kind": "Greeting", "words": "Shubh Prabhat", "people": "false"}\n```')["kind"] == "greeting"
-    assert model.parse("kind: meme")["kind"] == "meme"
+def test_parse_is_lenient_about_fences_case_and_string_booleans():
+    p = model.parse('```json\n{"kind": "Greeting", "words": "Shubh Prabhat", "people": "false", "screen": ""}\n```')
+    assert p["kind"] == "greeting" and p["people"] is False
+    assert model.parse("kind: meme")["kind"] is None
     assert model.parse("no idea")["kind"] is None
 
 
@@ -78,3 +79,42 @@ def test_lookalikes_are_asked_separately(con, tmp_path):
     f = fake(['{"kind":"greeting","words":"Good Morning","people":false,"screen":""}'])
     scan.run(con, classify=f, log=lambda *a: None)
     assert len(f.calls) == 2
+
+
+def test_a_cut_off_answer_is_unreadable():
+    """Truncated JSON must not keep a forward kind while losing 'people' (review finding B2)."""
+    p = model.parse('{"kind":"greeting","words":"शुभ दीपावली शर्मा परिवार')
+    assert p["kind"] is None
+
+
+def test_an_answer_missing_fields_is_unreadable():
+    assert model.parse('{"kind":"greeting","words":"Good Morning"}')["kind"] is None
+
+
+def test_answer_stopped_by_length_is_unreadable(monkeypatch):
+    monkeypatch.setattr(model.time, "sleep", lambda s: None)
+    full = '{"kind":"greeting","words":"Good Morning","people":false,"screen":""}'
+    out = model.classify(b"x", asker=lambda j, u: (full, 3, "length"), log=lambda *a: None)
+    assert out["kind"] is None and "cut off" in out["error"]
+
+
+def test_a_file_with_an_unreadable_answer_is_not_offered_again(con, tmp_path):
+    """Otherwise the durable workflow asks about it forever and never finishes (review finding M7)."""
+    a = add(con, card(tmp_path / "a.jpg"), "wa_images")
+    pull.index(con)
+    scan.store(con, con.execute("SELECT sha1 FROM files WHERE id=?", (a,)).fetchone()[0],
+               {"kind": None, "words": "", "people": None, "screen": "", "raw": "?", "ms": 1, "error": "unreadable"})
+    assert scan.pending(con) == []
+    assert scan.retry_unsure(con) == 1 and len(scan.pending(con)) == 1
+
+
+def test_camera_videos_are_not_sent_to_the_model(con, tmp_path):
+    from PIL import Image
+    p = tmp_path / "VID_1.mp4"
+    Image.new("RGB", (64, 64), (2, 2, 2)).save(tmp_path / "x.jpg")
+    p.write_bytes((tmp_path / "x.jpg").read_bytes())
+    fid = add(con, p, "camera")
+    con.execute("UPDATE files SET sha1='v', dhash='0000000000000000' WHERE id=?", (fid,))
+    con.execute("INSERT INTO checks(file_id, blur, dark) VALUES(?, 1, 2)", (fid,))
+    con.commit()
+    assert scan.pending(con) == []

@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from . import db, guard, model, pull, report, review, scan
-from .apply import apply as apply_fn, NotReviewed
+from .apply import apply as apply_fn, NotReviewed, WrongPhone
 from .phone import Phone, PhoneError, find_adb
 
 
@@ -75,6 +75,8 @@ def cmd_devices(args):
 
 
 def do_pull(args, con, mirror, ph, d):
+    db.set_meta(con, "serial", d["serial"])
+    db.set_meta(con, "mirror", str(mirror))
     db.set_meta(con, "device", ph.model_name())
     db.set_meta(con, "free_at_pull", ph.free_bytes())
     t0 = time.time()
@@ -125,6 +127,8 @@ def need_model(url):
 def cmd_scan(args):
     con, ws, _ = open_db(args, args.serial)
     need_model(args.model_url)
+    if args.retry_unsure:
+        print(f"Asking again about {scan.retry_unsure(con)} pictures that got an unreadable answer.")
     if args.durable:
         from . import durable
         n = durable.run_sync(ws / "sweep.db", args.model_url, f"sweep-{ws.name}", address=args.temporal)
@@ -169,18 +173,22 @@ def cmd_review(args):
     dbpath = ws / "sweep.db"
 
     def do_apply(c):
-        ph = Phone(args.serial)
+        ph = Phone(args.serial or db.get_meta(c, "serial"))
         ph.require_device()
-        return apply_fn(c, ph)
+        return apply_fn(c, ph, scratch_dir=db.get_meta(c, "mirror") or str(ws))
     review.serve(lambda: db.connect(dbpath), ws, do_apply, port=args.port)
 
 
 def cmd_apply(args):
-    con, _, _ = open_db(args, args.serial)
-    ph, d = (None, None) if args.dry_run else phone_or_exit(args)
+    con, ws, _ = open_db(args, args.serial)
+    if args.dry_run:
+        ph = None
+    else:
+        args.serial = args.serial or db.get_meta(con, "serial")
+        ph, d = phone_or_exit(args)
     try:
-        print(apply_fn(con, ph, dry_run=args.dry_run))
-    except NotReviewed as e:
+        print(apply_fn(con, ph, scratch_dir=db.get_meta(con, "mirror") or str(ws), dry_run=args.dry_run))
+    except (NotReviewed, WrongPhone) as e:
         sys.exit(str(e))
 
 
@@ -212,7 +220,9 @@ def main(argv=None):
     sub.add_parser("index").set_defaults(f=cmd_index)
     p = sub.add_parser("scan"); p.add_argument("--limit", type=int)
     p.add_argument("--durable", action="store_true", help="run as a Temporal workflow that survives crashes")
-    p.add_argument("--temporal", default="localhost:7233"); p.set_defaults(f=cmd_scan)
+    p.add_argument("--temporal", default="localhost:7233")
+    p.add_argument("--retry-unsure", action="store_true", help="ask again about pictures that got an unreadable answer")
+    p.set_defaults(f=cmd_scan)
     sub.add_parser("suggest").set_defaults(f=cmd_suggest)
     p = sub.add_parser("run"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_run)
     p = sub.add_parser("review"); p.add_argument("--port", type=int, default=8777); p.add_argument("--static")

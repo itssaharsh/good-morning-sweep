@@ -3,7 +3,9 @@
 Served on 127.0.0.1 only. Tap a picture to keep it. Nothing is deleted until "Delete from phone" is pressed, and the
 laptop keeps its copy of every file either way. `--static` writes a self-contained demo copy with no server."""
 import base64
+import hmac
 import json
+import secrets
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,7 +29,7 @@ def items(con, buckets=None):
             continue
         sel = (r["decided"] == "delete") if r["decided"] else bool(r["preselected"])
         out.append({"id": r["id"], "bucket": r["bucket"], "reason": r["reason"], "bytes": r["bytes"],
-                    "video": r["folder"].startswith("wa_video"), "sel": sel, "gone": bool(r["deleted"]),
+                    "video": media.is_video(r["phone_path"]), "sel": sel, "gone": bool(r["deleted"]),
                     "name": r["phone_path"].rsplit("/", 1)[-1]})
     return out
 
@@ -88,6 +90,10 @@ border:2px solid transparent;transition:border-color .15s,opacity .15s}
 .badge{position:absolute;top:8px;left:8px;padding:3px 9px;border-radius:999px;font-size:13px;font-weight:650;color:#fff}
 .sel .badge{background:var(--del)}.tile:not(.sel) .badge{background:var(--keep)}
 .vid{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:8px;padding:2px 7px;font-size:12px}
+.zoom{position:absolute;right:8px;top:calc(100% - 40px);width:32px;height:32px;border-radius:50%;
+background:rgba(0,0,0,.55);color:#fff;font-size:16px;line-height:32px;text-align:center;padding:0}
+.tile .imgwrap{position:relative}
+.unseen{color:var(--soft);font-size:14px;margin-top:2px}
 .why{padding:9px 11px 11px;font-size:14px;line-height:1.35}.why .sz{color:var(--soft);font-size:12.5px;margin-top:4px}
 .empty{color:var(--soft);padding:40px 0;text-align:center}
 dialog{border:0;border-radius:16px;padding:0;max-width:min(92vw,900px);background:var(--card);color:var(--ink)}
@@ -97,7 +103,7 @@ padding:12px 18px;border-radius:12px;display:none;max-width:90vw}
 @media (max-width:640px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}.total{margin-left:0;text-align:left}}
 </style></head><body>
 <header><div class="bar"><div class="brand"><span class="sun"></span>Good Morning Sweep</div>
-<div class="total"><b id="tot">0 GB</b><small id="totn">to free</small></div>
+<div class="total"><b id="tot">0 GB</b><small id="totn">to free</small><small class="unseen" id="unseen"></small></div>
 <button class="go" id="go">Delete from phone</button></div></header>
 <main><p class="demo" id="demo" hidden></p><p class="intro" id="intro"></p><div id="groups"></div></main>
 <dialog id="dlg"><img id="big" alt=""><p id="bigwhy"></p></dialog><div class="toast" id="toast"></div>
@@ -109,53 +115,72 @@ let items = DATA.items;
 const gb = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? Math.round(b/1e6)+' MB' : Math.max(1, Math.round(b/1e3))+' KB';
 const src = it => STATIC ? DATA.thumbs[it.id] : '/t/'+it.id+'.jpg';
 if (STATIC && DATA.note){ const d=document.getElementById('demo'); d.hidden=false; d.innerHTML=DATA.note; }
+const tiles = new Map();
+const seenObs = ('IntersectionObserver' in window) ? new IntersectionObserver(es => {
+  for (const e of es) if (e.isIntersecting) { const it = tiles.get(e.target); if (it && !it.seen) { it.seen = true; totals(); } }
+}, {threshold: 0.6}) : null;
+function paint(t, it){
+  t.classList.toggle('sel', it.sel && !it.gone); t.classList.toggle('gone', it.gone);
+  t.querySelector('.badge').textContent = it.gone ? 'Deleted' : (it.sel ? 'Delete' : 'Keep');
+}
+function totals(){
+  const sel = items.filter(i=>i.sel && !i.gone && (i.seen || STATIC));
+  const later = items.filter(i=>i.sel && !i.gone && !i.seen && !STATIC).length;
+  document.getElementById('tot').textContent = gb(sel.reduce((a,i)=>a+i.bytes,0));
+  document.getElementById('totn').textContent = `to free · ${sel.length.toLocaleString()} pictures`;
+  document.getElementById('unseen').textContent = later ? `${later.toLocaleString()} more ticked below: scroll to them, or they stay on the phone` : '';
+  document.getElementById('go').disabled = !sel.length;
+}
 function render(){
-  const g = document.getElementById('groups'); g.innerHTML='';
+  const g = document.getElementById('groups'); g.innerHTML=''; tiles.clear(); if (seenObs) seenObs.disconnect();
   document.getElementById('intro').textContent =
     `Gemma looked at ${S.looked_at.toLocaleString()} pictures from ${S.device} on this laptop. `+
-    `Red pictures will be deleted from the phone. Tap a picture to keep it. Everything stays saved on the laptop.`;
+    `Red pictures will be deleted from the phone, but only the ones you have scrolled past. Tap a picture to keep it; `+
+    `tap the magnifier to see it bigger. Everything stays saved on the laptop.`;
   for (const [key,title] of GROUPS){
     const list = items.filter(i=>i.bucket===key); if(!list.length) continue;
     const sec = document.createElement('section');
     const bytes = list.reduce((a,i)=>a+i.bytes,0);
     sec.innerHTML = `<div class="sh"><h2>${title}</h2><span class="meta">${list.length.toLocaleString()} · ${gb(bytes)}</span>
-      <button class="all" data-k="${key}">${list.every(i=>i.sel)?'Keep all':'Delete all'}</button></div><div class="grid"></div>`;
+      <button class="all">${list.every(i=>i.sel)?'Keep all':'Delete all'}</button></div><div class="grid"></div>`;
     const grid = sec.querySelector('.grid');
-    for (const it of list.slice(0, 600)){
+    for (const it of list){
       const t = document.createElement('div');
-      t.className = 'tile'+(it.sel?' sel':'')+(it.gone?' gone':'')+(key==='screenshots'?' shot':''); t.dataset.id = it.id;
-      t.innerHTML = `<img class="ph" loading="lazy" alt="" src="${src(it)}"><span class="badge">${it.gone?'Deleted':(it.sel?'Delete':'Keep')}</span>
-        ${it.video?'<span class="vid">video</span>':''}<div class="why"></div>`;
+      t.className = 'tile'+(key==='screenshots'?' shot':''); t.dataset.id = it.id;
+      t.innerHTML = `<div class="imgwrap"><img class="ph" loading="lazy" alt="" src="${src(it)}"><button class="zoom" title="See it bigger" aria-label="See it bigger"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="vertical-align:-3px"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg></button></div>
+        <span class="badge"></span>${it.video?'<span class="vid">video</span>':''}<div class="why"></div>`;
       t.querySelector('.why').textContent = it.reason;
       const sz = document.createElement('div'); sz.className='sz'; sz.textContent = gb(it.bytes); t.querySelector('.why').appendChild(sz);
-      t.querySelector('.ph').onclick = () => toggle(it);
+      t.querySelector('.ph').onclick = () => { if (it.gone) return; it.sel = !it.sel; paint(t, it); totals(); };
       t.querySelector('.ph').oncontextmenu = e => {e.preventDefault(); zoom(it);};
+      t.querySelector('.zoom').onclick = () => zoom(it);
+      paint(t, it); tiles.set(t, it); if (seenObs) seenObs.observe(t); else it.seen = true;
       grid.appendChild(t);
     }
-    if (list.length>600){const m=document.createElement('p');m.className='empty';m.textContent=`and ${list.length-600} more like these`;sec.appendChild(m);}
-    sec.querySelector('.all').onclick = () => {const on=!list.every(i=>i.sel); list.forEach(i=>i.sel=on); render();};
+    const allBtn = sec.querySelector('.all');
+    allBtn.onclick = () => { const on=!list.every(i=>i.sel); list.forEach(i=>{ if(!i.gone) i.sel=on; });
+      for (const [t,i] of tiles) if (i.bucket===key) paint(t,i); allBtn.textContent = on?'Keep all':'Delete all'; totals(); };
     g.appendChild(sec);
   }
   if(!items.length) g.innerHTML='<p class="empty">Nothing to suggest. This phone is already tidy.</p>';
-  const sel = items.filter(i=>i.sel && !i.gone);
-  document.getElementById('tot').textContent = gb(sel.reduce((a,i)=>a+i.bytes,0));
-  document.getElementById('totn').textContent = `to free · ${sel.length.toLocaleString()} pictures`;
-  document.getElementById('go').disabled = !sel.length;
+  totals();
 }
-function toggle(it){ it.sel = !it.sel; render(); }
 function zoom(it){ document.getElementById('big').src = STATIC ? src(it) : '/full/'+it.id+'.jpg';
   document.getElementById('bigwhy').textContent = it.reason; document.getElementById('dlg').showModal(); }
 document.getElementById('dlg').onclick = e => e.currentTarget.close();
 function toast(m){const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',6000);}
 document.getElementById('go').onclick = async () => {
-  const sel = items.filter(i=>i.sel && !i.gone);
+  const sel = items.filter(i=>i.sel && !i.gone && (i.seen || STATIC));
   if (STATIC){ toast(`Demo: on a real phone this deletes ${sel.length} pictures (${gb(sel.reduce((a,i)=>a+i.bytes,0))}).`); return; }
   if (!confirm(`Delete ${sel.length} pictures from the phone? The laptop keeps a copy of each.`)) return;
   const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Deleting…';
-  const r = await fetch('/api/apply', {method:'POST', body: JSON.stringify({delete: sel.map(i=>i.id)})});
+  const r = await fetch('/api/apply', {method:'POST', headers:{'X-Sweep-Token': DATA.token},
+    body: JSON.stringify({delete: sel.map(i=>i.id), suggested_at: DATA.suggested_at})});
   const j = await r.json(); b.textContent = 'Delete from phone';
-  if (!r.ok){ toast(j.error || 'Something went wrong'); render(); return; }
-  items = j.items; render(); toast(`Done. ${j.deleted} deleted, ${gb(j.freed)} freed.`);
+  if (!r.ok){ toast(j.error || 'Something went wrong'); totals(); return; }
+  const fresh = new Map(j.items.map(x=>[x.id,x]));
+  for (const [t,i] of tiles){ const f = fresh.get(i.id); if (f){ i.gone = f.gone; i.sel = f.sel; paint(t,i); } }
+  totals(); toast(`Done. ${j.deleted} deleted, ${gb(j.freed)} freed.` + (j.held ? ` ${j.held} kept for safety.` : ''));
 };
 render();
 </script></body></html>"""
@@ -165,9 +190,10 @@ render();
 PUBLIC_BUCKETS = ("forwards",)
 
 
-def page(con, static=False, thumb_dir=None, buckets=None, note=None):
+def page(con, static=False, thumb_dir=None, buckets=None, note=None, token=""):
     its = items(con, buckets)
-    data = {"groups": [[b, t] for b, t, _ in guard.BUCKETS], "summary": summary(con), "items": its, "note": note}
+    data = {"groups": [[b, t] for b, t, _ in guard.BUCKETS], "summary": summary(con), "items": its, "note": note,
+            "token": "" if static else token, "suggested_at": get_meta(con, "suggested_at", "")}
     if static:
         data["thumbs"] = {}
         for it in its:
@@ -182,6 +208,7 @@ def page(con, static=False, thumb_dir=None, buckets=None, note=None):
 def serve(con_factory, workspace, apply_fn, port=8777, log=print):
     thumbs = Path(workspace) / "thumbs"
     lock = threading.Lock()
+    token = secrets.token_urlsafe(18)   # only this page can ask for a deletion
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -200,7 +227,7 @@ def serve(con_factory, workspace, apply_fn, port=8777, log=print):
             con = con_factory()
             try:
                 if path == "/":
-                    return self.send(200, page(con).encode(), "text/html; charset=utf-8")
+                    return self.send(200, page(con, token=token).encode(), "text/html; charset=utf-8")
                 for prefix, side, sub in (("/t/", 320, "s"), ("/full/", 1200, "l")):
                     if path.startswith(prefix) and path.endswith(".jpg"):
                         fid = int(path[len(prefix):-4])
@@ -217,6 +244,13 @@ def serve(con_factory, workspace, apply_fn, port=8777, log=print):
             con = con_factory()
             try:
                 if self.path == "/api/apply":
+                    if not hmac.compare_digest(self.headers.get("X-Sweep-Token", ""), token):
+                        return self.send(403, json.dumps({"error": "This page is out of date. Reload it."}).encode(),
+                                         "application/json")
+                    if str(body.get("suggested_at", "")) != str(get_meta(con, "suggested_at", "")):
+                        return self.send(409, json.dumps({"error": "The suggestions changed since this page was "
+                                                          "opened. Reload it and look again."}).encode(),
+                                         "application/json")
                     with lock:
                         save(con, body.get("delete", []))
                         res = apply_fn(con)

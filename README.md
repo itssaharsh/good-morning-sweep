@@ -57,7 +57,7 @@ sweep review                      # http://127.0.0.1:8777 : tap to keep, then "D
 sweep report                      # what was found and freed
 ```
 
-Step by step instead: `sweep pull`, `sweep scan` (or `sweep scan --durable` with `temporal server start-dev` running),
+Step by step instead: `sweep pull`, `sweep scan` (or `sweep scan --durable` with `temporal server start-dev --db-filename ~/GoodMorningSweep/temporal.db` running, so the workflow survives a restart of the server too),
 `sweep suggest`, `sweep review`, `sweep apply`. `sweep import <folder>` works on a folder of pictures instead of a phone.
 `sweep label` opens a page to label a random sample as junk or keep, and `sweep report` then scores the model alone
 against the guard on it.

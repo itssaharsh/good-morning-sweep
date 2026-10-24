@@ -144,23 +144,51 @@ class Phone:
         if code != 0:
             raise PhoneError((err or out).strip()[-300:])
 
-    def delete(self, paths, batch=200):
-        """Delete files on the phone. Returns {path: (ok, message)}. On Android 11+ the gallery updates itself."""
+    def run_script(self, lines, scratch_dir, name="sweep-job.sh", timeout=1800):
+        """Push a shell script to the phone and run it: no command-line length limits (Windows caps a command at
+        32,767 characters; old Android caps adb shell at 4 KB). Returns its output lines."""
+        Path(scratch_dir).mkdir(parents=True, exist_ok=True)
+        local = Path(scratch_dir) / name
+        local.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        remote = f"/data/local/tmp/{name}"
+        code, out, err = self.run_(["push", to_host_path(local), remote], 300)
+        if code != 0:
+            raise PhoneError(f"could not copy a script to the phone: {(err or out).strip()[-200:]}")
+        try:
+            return self.shell(f"sh {remote}", timeout=timeout).splitlines()
+        finally:
+            self.run_(["shell", f"rm -f {remote}"], 60)
+
+    def delete(self, items, scratch_dir, batch=400, on_batch=None):
+        """Delete files on the phone, each only if its SHA-1 on the phone still matches the backed-up copy.
+        items: [(phone path, sha1)]. Returns {path: (ok, message)}; on_batch(result_so_far) after each batch."""
         result = {}
-        for i in range(0, len(paths), batch):
-            chunk = paths[i:i + batch]
-            script = "; ".join(f"rm -f {q(p)} && echo OK:{q(p)} || echo FAIL:{q(p)}" for p in chunk)
-            out = self.shell(script, timeout=900)
+        for start in range(0, len(items), batch):
+            chunk = items[start:start + batch]
+            lines = []
+            for i, (p, h) in enumerate(chunk):
+                lines.append(f"f={q(p)}; if [ -f \"$f\" ]; then h=$(sha1sum \"$f\" 2>/dev/null); h=${{h%% *}}; h=${{h#\\\\}}; "
+                             f"if [ \"$h\" = {q(h)} ]; then rm -f \"$f\" && echo \"OK {i}\" || echo \"FAIL {i}\"; "
+                             f"else echo \"CHANGED {i}\"; fi; else echo \"MISSING {i}\"; fi")
             said = {}
-            for line in out.splitlines():
-                if line.startswith("OK:"):
-                    said[line[3:]] = (True, "deleted")
-                elif line.startswith("FAIL:"):
-                    said[line[5:]] = (False, "rm failed")
-            for p in chunk:
-                result[p] = said.get(p, (False, "no answer from the phone"))
+            for line in self.run_script(lines, scratch_dir, "sweep-delete.sh"):
+                parts = line.split()
+                if len(parts) == 2 and parts[1].isdigit() and int(parts[1]) < len(chunk):
+                    said[int(parts[1])] = parts[0]
+            for i, (p, _) in enumerate(chunk):
+                st = said.get(i)
+                result[p] = {"OK": (True, "deleted"), "FAIL": (False, "rm failed"),
+                             "CHANGED": (False, "the phone's copy differs from the backup, so it was kept"),
+                             "MISSING": (False, "not on the phone any more")}.get(st, (False, "no answer from the phone"))
+            if on_batch:
+                on_batch({p: result[p] for p, _ in chunk})
         return result
 
-    def still_there(self, paths):
-        script = "; ".join(f"[ -e {q(p)} ] && echo {q(p)}" for p in paths)
-        return set(self.shell(script).splitlines()) if paths else set()
+    def present(self, paths, scratch_dir):
+        """The subset of paths that exist on the phone."""
+        if not paths:
+            return set()
+        lines = [f"[ -f {q(p)} ] && echo \"Y {i}\"" for i, p in enumerate(paths)]
+        out = self.run_script(lines, scratch_dir, "sweep-present.sh")
+        idx = {int(l.split()[1]) for l in out if l.startswith("Y ") and l.split()[1].isdigit()}
+        return {paths[i] for i in idx if i < len(paths)}

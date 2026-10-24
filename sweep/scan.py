@@ -12,21 +12,30 @@ MODEL_FOLDERS = ("wa_images", "wa_sent", "wa_video", "wa_video_sent", "screensho
 
 
 def pending(con):
-    """Files that still need the model: one per sha1, WhatsApp and screenshot folders always, camera photos only
-    when the code already finds them blurry or black. Biggest first."""
+    """Files that still need the model: one per sha1, WhatsApp and screenshot folders always, camera photos (never
+    camera videos) only when the code already finds them blurry or black. A sha1 that already has an answer, even an
+    unreadable one, is not offered again (`retry_unsure` clears those). Biggest first."""
     rows = con.execute(f"""
         SELECT f.*, c.blur, c.dark FROM files f LEFT JOIN checks c ON c.file_id = f.id
-        WHERE f.sha1 IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM verdicts v JOIN files g ON g.id = v.file_id WHERE g.sha1 = f.sha1 AND v.kind IS NOT NULL)
+        WHERE f.sha1 IS NOT NULL AND COALESCE(f.gone, 0) = 0 AND NOT EXISTS (
+            SELECT 1 FROM verdicts v JOIN files g ON g.id = v.file_id WHERE g.sha1 = f.sha1)
           AND (f.folder IN ({",".join("?" * len(MODEL_FOLDERS))})
                OR (f.folder = 'camera' AND (c.blur < ? OR c.dark < ?)))
         ORDER BY f.bytes DESC""", (*MODEL_FOLDERS, checks.BLUR_FLAG, checks.DARK_FLAG)).fetchall()
     one, seen = [], set()
     for r in rows:
+        if r["folder"] == "camera" and media.is_video(r["phone_path"]):
+            continue
         if r["sha1"] not in seen:
             seen.add(r["sha1"])
             one.append(r)
     return one
+
+
+def retry_unsure(con):
+    """Forget the unreadable answers so the next scan asks about those pictures again."""
+    with con:
+        return con.execute("DELETE FROM verdicts WHERE kind IS NULL").rowcount
 
 
 def lookalikes(con, todo):

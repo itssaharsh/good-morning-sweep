@@ -56,8 +56,13 @@ def wait_until_up(url=MODEL_URL, wait_s=600, every=10, log=print):
     return False
 
 
+REQUIRED = ("kind", "words", "people", "screen")
+
+
 def parse(text):
-    """The model's answer as a dict with known keys; lenient about fences and extra words."""
+    """The model's answer as a dict. Lenient about code fences, case and "false" written as a string, strict about
+    the rest: an answer that is not complete JSON with all four fields is unreadable (kind None), so a cut-off answer
+    can never keep its kind while losing whether real people are in the picture."""
     t = (text or "").strip()
     t = re.sub(r"^```(?:json)?|```$", "", t, flags=re.M).strip()
     m = re.search(r"\{.*\}", t, re.S)
@@ -66,29 +71,24 @@ def parse(text):
         try:
             data = json.loads(m.group(0))
         except json.JSONDecodeError:
-            try:
-                data = json.loads(re.sub(r"\btrue\b|\bfalse\b", lambda x: x.group(0).lower(),
-                                         m.group(0).replace("'", '"')))
-            except json.JSONDecodeError:
-                data = None
-    if not isinstance(data, dict):
-        km = re.search(r'"?kind"?\s*:\s*"?(\w+)', t)
-        data = {"kind": km.group(1)} if km else {}
+            data = None
+    if not isinstance(data, dict) or any(k not in data for k in REQUIRED):
+        return {"kind": None, "words": "", "people": None, "screen": ""}
     kind = str(data.get("kind", "")).strip().lower()
     screen = str(data.get("screen", "") or "").strip().lower()
     people = data.get("people")
     if isinstance(people, str):
-        people = people.strip().lower() == "true"
+        people = {"true": True, "false": False}.get(people.strip().lower())
     return {
         "kind": kind if kind in KINDS else None,
         "words": str(data.get("words", "") or "").strip()[:300],
-        "people": bool(people) if people is not None else None,
+        "people": people if isinstance(people, bool) else None,
         "screen": screen if screen in SCREENS else "",
     }
 
 
-def ask(jpeg, url=MODEL_URL, timeout=300, max_tokens=90):
-    """One request. Returns (raw text, ms). Raises ModelDown when the server can't be reached."""
+def ask(jpeg, url=MODEL_URL, timeout=300, max_tokens=160):
+    """One request. Returns (raw text, ms, finish reason). Raises ModelDown when the server can't be reached."""
     b64 = base64.b64encode(jpeg).decode()
     body = {
         "messages": [
@@ -113,7 +113,8 @@ def ask(jpeg, url=MODEL_URL, timeout=300, max_tokens=90):
     except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
         raise ModelDown(str(e))
     ms = int((time.time() - t0) * 1000)
-    return data["choices"][0]["message"].get("content") or "", ms
+    choice = data["choices"][0]
+    return choice["message"].get("content") or "", ms, choice.get("finish_reason") or ""
 
 
 def classify(jpeg, url=MODEL_URL, attempts=3, asker=ask, log=print, wait_s=600):
@@ -122,12 +123,19 @@ def classify(jpeg, url=MODEL_URL, attempts=3, asker=ask, log=print, wait_s=600):
     last = None
     for i in range(attempts):
         try:
-            raw, ms = asker(jpeg, url)
+            got = asker(jpeg, url)
+            raw, ms = got[0], got[1]
+            finish = got[2] if len(got) > 2 else ""
             out = parse(raw)
+            if finish == "length":   # the answer was cut off: whatever it said is not trusted
+                out = dict(out, kind=None)
+                why = f"answer cut off at the token limit: {raw[:120]!r}"
+            else:
+                why = f"unreadable answer: {raw[:120]!r}"
             if out["kind"] is None and i + 1 < attempts:
-                last = f"unreadable answer: {raw[:120]!r}"
+                last = why
                 continue
-            return dict(out, raw=raw, ms=ms, error=None if out["kind"] else f"unreadable answer: {raw[:120]!r}")
+            return dict(out, raw=raw, ms=ms, error=None if out["kind"] else why)
         except ModelDown:
             if not wait_until_up(url, wait_s=wait_s, log=log):
                 raise
