@@ -13,7 +13,7 @@ from . import guard, media
 from .db import now, set_meta, get_meta
 
 
-def items(con):
+def items(con, buckets=None):
     rows = con.execute("""
         SELECT s.file_id AS id, s.bucket, s.reason, s.rule, s.preselected, f.bytes, f.folder, f.phone_path,
                d.action AS decided, x.ok AS deleted
@@ -23,6 +23,8 @@ def items(con):
         ORDER BY f.bytes DESC""").fetchall()
     out = []
     for r in rows:
+        if buckets and r["bucket"] not in buckets:
+            continue
         sel = (r["decided"] == "delete") if r["decided"] else bool(r["preselected"])
         out.append({"id": r["id"], "bucket": r["bucket"], "reason": r["reason"], "bytes": r["bytes"],
                     "video": r["folder"].startswith("wa_video"), "sel": sel, "gone": bool(r["deleted"]),
@@ -155,8 +157,12 @@ render();
 </script></body></html>"""
 
 
-def page(con, static=False, thumb_dir=None):
-    its = items(con)
+# A public demo page may only show pictures nobody in the family took: forwards, and copies of forwards.
+PUBLIC_BUCKETS = ("forwards",)
+
+
+def page(con, static=False, thumb_dir=None, buckets=None):
+    its = items(con, buckets)
     data = {"groups": [[b, t] for b, t, _ in guard.BUCKETS], "summary": summary(con), "items": its}
     if static:
         data["thumbs"] = {}

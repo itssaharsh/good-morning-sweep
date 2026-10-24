@@ -121,9 +121,14 @@ def need_model(url):
 
 
 def cmd_scan(args):
-    con, _, _ = open_db(args, args.serial)
+    con, ws, _ = open_db(args, args.serial)
     need_model(args.model_url)
-    scan.run(con, limit=args.limit, url=args.model_url)
+    if args.durable:
+        from . import durable
+        n = durable.run_sync(ws / "sweep.db", args.model_url, f"sweep-{ws.name}", address=args.temporal)
+        print(f"Workflow finished: {n} pictures looked at.")
+    else:
+        scan.run(con, limit=args.limit, url=args.model_url)
     guard.build(con)
     print(report.summary(con))
 
@@ -152,7 +157,8 @@ def cmd_run(args):
 def cmd_review(args):
     con, ws, _ = open_db(args, args.serial)
     if args.static:
-        Path(args.static).write_text(review.page(con, static=True, thumb_dir=ws / "thumbs" / "d"), encoding="utf-8")
+        Path(args.static).write_text(review.page(con, static=True, thumb_dir=ws / "thumbs" / "d",
+                                                 buckets=review.PUBLIC_BUCKETS), encoding="utf-8")
         print(f"Wrote {args.static}")
         return
     dbpath = ws / "sweep.db"
@@ -199,7 +205,9 @@ def main(argv=None):
     p = sub.add_parser("pull"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_pull)
     p = sub.add_parser("import"); p.add_argument("folder"); p.add_argument("--device"); p.set_defaults(f=cmd_import)
     sub.add_parser("index").set_defaults(f=cmd_index)
-    p = sub.add_parser("scan"); p.add_argument("--limit", type=int); p.set_defaults(f=cmd_scan)
+    p = sub.add_parser("scan"); p.add_argument("--limit", type=int)
+    p.add_argument("--durable", action="store_true", help="run as a Temporal workflow that survives crashes")
+    p.add_argument("--temporal", default="localhost:7233"); p.set_defaults(f=cmd_scan)
     sub.add_parser("suggest").set_defaults(f=cmd_suggest)
     p = sub.add_parser("run"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_run)
     p = sub.add_parser("review"); p.add_argument("--port", type=int, default=8765); p.add_argument("--static")
