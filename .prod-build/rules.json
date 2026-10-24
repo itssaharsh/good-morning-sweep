@@ -1,0 +1,86 @@
+{
+  "rules": [
+    {
+      "id": "window",
+      "quote": "all submissions and their respective repositories must be started and completed within the challenge window. Commits made after the submission deadline must be noted in the project's readme.",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (FAQ)",
+      "dq": true,
+      "kind": "attest",
+      "added": "2026-10-24T21:10:14Z"
+    },
+    {
+      "id": "core-open",
+      "quote": "Is open-source AI or open-weight models at the core of the project?",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (Judging Criteria: Relevance)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:15Z",
+      "file": "post.md",
+      "heading": "How I Built It",
+      "number": false
+    },
+    {
+      "id": "template-what",
+      "quote": "Submission template: What I Built",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (submission template)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:15Z",
+      "file": "post.md",
+      "heading": "What I Built",
+      "number": false
+    },
+    {
+      "id": "template-demo",
+      "quote": "Submission template: Demo — Share a deployed link or a video demo.",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (submission template)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:15Z",
+      "file": "post.md",
+      "heading": "Demo",
+      "number": false
+    },
+    {
+      "id": "template-code",
+      "quote": "Submission template: Code — Show us the code!",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (submission template)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:16Z",
+      "file": "post.md",
+      "heading": "Code",
+      "number": false
+    },
+    {
+      "id": "template-open",
+      "quote": "Submission template: Why Does Open Innovation Matter?",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (submission template)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:16Z",
+      "file": "post.md",
+      "heading": "Why Does Open Innovation Matter?",
+      "number": false
+    },
+    {
+      "id": "lazy-payoff",
+      "quote": "How much time or effort does it actually save? Did you (or someone else) use it this week?",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (submission template, The Lazy Payoff)",
+      "dq": false,
+      "kind": "section",
+      "added": "2026-10-24T21:10:16Z",
+      "file": "post.md",
+      "heading": "The Lazy Payoff",
+      "number": true
+    },
+    {
+      "id": "one-entry",
+      "quote": "One submission per challenge",
+      "source": "https://dev.to/devteam/join-the-hacktoberfest-open-source-ai-challenge-slow-and-steady (FAQ)",
+      "dq": false,
+      "kind": "attest",
+      "added": "2026-10-24T21:10:17Z"
+    }
+  ]
+}

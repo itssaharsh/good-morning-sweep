@@ -1,0 +1,12 @@
+{
+  "name": "Hacktoberfest Open-Source AI Challenge Week 3: Slow and Steady",
+  "start": "2026-10-19T20:07:00Z",
+  "end": "2026-10-26T06:59:00Z",
+  "freeze": "2026-10-25T17:00:00Z",
+  "freeze_set": true,
+  "source": "https://dev.to/challenges/hacktoberfest-week3-2026-10-19",
+  "history": "strict",
+  "tz_min": 330,
+  "post_entry": true,
+  "set_at": "2026-10-24T21:09:57Z"
+}
