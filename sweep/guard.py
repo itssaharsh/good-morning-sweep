@@ -9,6 +9,7 @@ from . import checks, media
 from .wordlist import forward_words, has_words
 
 FORWARD_KINDS = {"greeting", "quote", "meme", "news", "ad"}
+ARTICLE = {"greeting": "a greeting", "quote": "a quote", "meme": "a meme", "news": "forwarded news", "ad": "an ad"}
 WA_FOLDERS = {"wa_images", "wa_sent", "wa_video", "wa_video_sent"}
 OLD_SCREEN_DAYS = 30
 SCREEN_NAMES = {"otp": "one-time code", "payment": "payment", "delivery": "delivery tracking"}
@@ -74,7 +75,7 @@ def _single(r, v, c, today, arrivals):
     # Rule P1/F1/F2: a WhatsApp forward. Real people in it, or the model not saying, makes it the person's call.
     if kind in FORWARD_KINDS and folder in WA_FOLDERS:
         if people is not False and people != 0:
-            return ("check", f"Looks like {kind}, but may have real people in it" +
+            return ("check", f"Looks like {ARTICLE.get(kind, kind)}, but may have real people in it" +
                     (f": “{short(words, 40)}”" if words else ""), "P1-people-in-forward", None)
         what = "Forwarded video" if folder.startswith("wa_video") else f"Forwarded {kind}"
         if has_words(words) and (forward_words(words) or kind in {"quote", "news", "ad", "meme"}):
