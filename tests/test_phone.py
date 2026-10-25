@@ -144,3 +144,13 @@ def test_a_file_transfer_copy_maps_back_to_phone_paths(con, tmp_path):
     assert rows[f"{wa}/Sent/IMG-20261013-WA0001.jpg"][0] == "wa_sent"
     import datetime as dt
     assert dt.datetime.fromtimestamp(rows["/sdcard/DCIM/Screenshots/Screenshot_20260801-101010.png"][1]).month == 8
+
+
+def test_the_sha1sum_probe_matches_python():
+    import hashlib
+    from sweep.phone import KNOWN_SHA1
+    assert hashlib.sha1(b"sweep").hexdigest() == KNOWN_SHA1
+    ph = Phone(runner=lambda args, timeout=0: (0, KNOWN_SHA1 + "  -\n", ""))
+    assert ph.can_hash()
+    ph2 = Phone(runner=lambda args, timeout=0: (0, "NOSHA\n", ""))
+    assert not ph2.can_hash()

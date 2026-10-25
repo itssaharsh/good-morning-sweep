@@ -24,6 +24,9 @@ ROOTS = [
 SKIP_PARTS = {"Private", ".Statuses", ".trash", ".thumbnails"}
 
 
+KNOWN_SHA1 = "ef4d07e4307b258018cd9220b89bb5db7f509776"   # sha1 of "sweep", checked in tests
+
+
 class PhoneError(RuntimeError):
     pass
 
@@ -161,8 +164,9 @@ class Phone:
 
     def can_hash(self):
         """True when the phone has sha1sum (toybox, Android 6+), which every deletion relies on."""
-        out = self.shell("sha1sum /system/build.prop 2>/dev/null || echo NOSHA")
-        return len(out.split()[0]) == 40 if out.strip() and not out.startswith("NOSHA") else False
+        # hashing a known string needs no file permissions (Android 14 refuses /system/build.prop to the shell)
+        out = self.shell("printf sweep | sha1sum 2>/dev/null || echo NOSHA")
+        return out.split()[:1] == [KNOWN_SHA1]
 
     def delete(self, items, scratch_dir, batch=400, on_batch=None):
         """Delete files on the phone, each only if its SHA-1 on the phone still matches the backed-up copy.
