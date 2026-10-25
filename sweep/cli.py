@@ -114,6 +114,18 @@ def cmd_import(args):
     pull.index(con)
 
 
+def cmd_import_mtp(args):
+    """A copy made in file-transfer mode (no USB debugging needed to copy and scan; deleting needs it later)."""
+    con, ws, mirror = open_db(args, args.serial)
+    n, b = pull.import_mtp(con, args.folder)
+    db.set_meta(con, "serial", args.serial)
+    db.set_meta(con, "mirror", str(args.folder))
+    db.set_meta(con, "device", args.device or "the phone")
+    db.set_meta(con, "source", "mtp")
+    print(f"Imported {n} files ({b / 1e9:.2f} GB) from {args.folder}")
+    pull.index(con)
+
+
 def cmd_index(args):
     con, _, _ = open_db(args, args.serial)
     print(f"Indexed {pull.index(con)} files")
@@ -217,6 +229,8 @@ def main(argv=None):
     sub.add_parser("devices").set_defaults(f=cmd_devices)
     p = sub.add_parser("pull"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_pull)
     p = sub.add_parser("import"); p.add_argument("folder"); p.add_argument("--device"); p.set_defaults(f=cmd_import)
+    p = sub.add_parser("import-mtp", help="index a copy made in file-transfer mode")
+    p.add_argument("folder"); p.add_argument("--device"); p.set_defaults(f=cmd_import_mtp)
     sub.add_parser("index").set_defaults(f=cmd_index)
     p = sub.add_parser("scan"); p.add_argument("--limit", type=int)
     p.add_argument("--durable", action="store_true", help="run as a Temporal workflow that survives crashes")

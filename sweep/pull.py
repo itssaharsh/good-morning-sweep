@@ -1,4 +1,6 @@
 """Copy the phone's picture folders to the laptop (this copy is also the backup) and index each file."""
+import datetime as dt
+import re
 import shutil
 from pathlib import Path
 
@@ -6,6 +8,7 @@ from . import media
 
 
 MARGIN = 5 * 10**9   # always leave this much free on the laptop
+SKIP = {"Private", ".Statuses", ".trash", ".thumbnails"}
 
 
 def folder_label(label, phone_path, root):
@@ -118,3 +121,57 @@ def index(con, log=print, every=500):
             log(f"indexed {n}/{len(rows)}")
     con.commit()
     return len(rows)
+
+
+# A copy made in file-transfer (MTP) mode, without USB debugging: folder name on the laptop -> folder on the phone.
+MTP_ROOTS = {
+    "wa_images": ("wa_images", "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"),
+    "wa_video": ("wa_video", "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video"),
+    "screenshots_dcim": ("screenshots", "/sdcard/DCIM/Screenshots"),
+    "screenshots_pictures": ("screenshots", "/sdcard/Pictures/Screenshots"),
+    "camera": ("camera", "/sdcard/DCIM/Camera"),
+}
+_DATE = re.compile(r"(20\d{2})(\d{2})(\d{2})(?:[-_](\d{2})(\d{2})(\d{2}))?")
+
+
+def date_from_name(name, fallback):
+    """WhatsApp and screenshot names carry their date (IMG-20261012-WA0003, Screenshot_20260801-101010)."""
+    m = _DATE.search(name)
+    if not m:
+        return fallback
+    try:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        hh, mm, ss = (int(m.group(i) or 0) for i in (4, 5, 6))
+        return dt.datetime(y, mo, d, hh, mm, ss).timestamp()
+    except ValueError:
+        return fallback
+
+
+def import_mtp(con, mirror, log=print):
+    """Index a folder copied from the phone in file-transfer mode (mirror/<label>/<phone folder name>/...).
+    Phone paths are rebuilt from the layout, so a later delete over adb finds each file (and checks its SHA-1)."""
+    mirror = Path(mirror)
+    n = b = 0
+    with con:
+        for key, (label, root) in MTP_ROOTS.items():
+            top = mirror / key / Path(root).name
+            if not top.is_dir():
+                continue
+            for f in sorted(top.rglob("*")):
+                if not f.is_file():
+                    continue
+                rel = f.relative_to(top).as_posix()
+                if any(part in SKIP or part.startswith(".") for part in rel.split("/")):
+                    continue
+                phone_path = f"{root}/{rel}"
+                st = f.stat()
+                con.execute(
+                    "INSERT INTO files(phone_path, local_path, folder, bytes, mtime, root, gone) VALUES(?,?,?,?,?,?,0) "
+                    "ON CONFLICT(phone_path) DO UPDATE SET local_path=excluded.local_path, bytes=excluded.bytes, "
+                    "mtime=excluded.mtime, root=excluded.root, gone=0",
+                    (phone_path, str(f), folder_label(label, phone_path, root), st.st_size,
+                     date_from_name(f.name, st.st_mtime), root))
+                n += 1
+                b += st.st_size
+            log(f"{key:20s} imported from {top}")
+    return n, b

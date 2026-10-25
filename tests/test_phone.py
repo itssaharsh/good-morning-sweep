@@ -124,3 +124,23 @@ def test_files_gone_from_the_phone_are_marked_gone(con, tmp_path):
     pull.pull(con, ph, tmp_path / "mirror", log=lambda *x: None)
     gone = dict(con.execute("SELECT phone_path, gone FROM files").fetchall())
     assert gone == {"/sdcard/DCIM/Screenshots/a.png": 0, "/sdcard/DCIM/Screenshots/b.png": 1}
+
+
+def test_a_file_transfer_copy_maps_back_to_phone_paths(con, tmp_path):
+    from conftest import card
+    m = tmp_path / "mtp"
+    (m / "wa_images" / "WhatsApp Images" / "Sent").mkdir(parents=True)
+    (m / "wa_images" / "WhatsApp Images" / "Private").mkdir(parents=True)
+    (m / "screenshots_dcim" / "Screenshots").mkdir(parents=True)
+    card(m / "wa_images" / "WhatsApp Images" / "IMG-20261012-WA0003.jpg")
+    card(m / "wa_images" / "WhatsApp Images" / "Sent" / "IMG-20261013-WA0001.jpg", seed=3)
+    card(m / "wa_images" / "WhatsApp Images" / "Private" / "IMG-1.jpg", seed=4)
+    card(m / "screenshots_dcim" / "Screenshots" / "Screenshot_20260801-101010.png", seed=5)
+    n, _ = pull.import_mtp(con, m, log=lambda *a: None)
+    rows = {r["phone_path"]: (r["folder"], r["mtime"]) for r in con.execute("SELECT * FROM files")}
+    assert n == 3
+    wa = "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"
+    assert rows[f"{wa}/IMG-20261012-WA0003.jpg"][0] == "wa_images"
+    assert rows[f"{wa}/Sent/IMG-20261013-WA0001.jpg"][0] == "wa_sent"
+    import datetime as dt
+    assert dt.datetime.fromtimestamp(rows["/sdcard/DCIM/Screenshots/Screenshot_20260801-101010.png"][1]).month == 8
