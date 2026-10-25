@@ -87,8 +87,19 @@ def do_pull(args, con, mirror, ph, d):
 
 def cmd_pull(args):
     ph, d = phone_or_exit(args)
-    con, ws, mirror = open_db(args, d["serial"])
-    do_pull(args, con, mirror, ph, d)
+    if args.bin:
+        # the gallery's "Recently deleted" bin: a person's own deletions, copied for scoring only; this workspace can
+        # never delete anything (no phone serial is recorded for it)
+        args.name = f"{d['serial']}-bin"
+        con, ws, mirror = open_db(args, d["serial"])
+        db.set_meta(con, "device", ph.model_name() + " (Recently deleted bin)")
+        n, b = pull.pull(con, ph, mirror, only=args.only, only_trashed=True)
+        db.set_meta(con, "serial", "")
+        db.set_meta(con, "source", "bin: deleted by hand, for scoring only")
+        print(f"Copied {n} files ({b / 1e9:.2f} GB) from the Recently deleted bin. This workspace cannot delete.")
+    else:
+        con, ws, mirror = open_db(args, d["serial"])
+        do_pull(args, con, mirror, ph, d)
     pull.index(con)
 
 
@@ -227,7 +238,9 @@ def main(argv=None):
     ap.add_argument("--model-url", default=model.MODEL_URL)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("devices").set_defaults(f=cmd_devices)
-    p = sub.add_parser("pull"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_pull)
+    p = sub.add_parser("pull"); p.add_argument("--only", nargs="*")
+    p.add_argument("--bin", action="store_true", help="copy only the Recently deleted bin, for scoring (never deletes)")
+    p.set_defaults(f=cmd_pull)
     p = sub.add_parser("import"); p.add_argument("folder"); p.add_argument("--device"); p.set_defaults(f=cmd_import)
     p = sub.add_parser("import-mtp", help="index a copy made in file-transfer mode")
     p.add_argument("folder"); p.add_argument("--device"); p.set_defaults(f=cmd_import_mtp)

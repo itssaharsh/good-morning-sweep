@@ -118,8 +118,10 @@ class Phone:
                     seen_wa.add(label)
         return found
 
-    def list_files(self, root):
-        """[(phone path, bytes, mtime)] under a folder, skipping hidden and private parts."""
+    def list_files(self, root, only_trashed=False):
+        """[(phone path, bytes, mtime)] under a folder, skipping hidden and private parts. only_trashed: just the
+        files the gallery's "Recently deleted" bin holds (.trashed-<expiry>-<name>), for scoring against a person's
+        own deletions."""
         out = self.shell(f"find {q(root)} -type f -exec stat -c '%s|%Y|%n' {{}} +", timeout=900)
         rows = []
         for line in out.splitlines():
@@ -128,7 +130,11 @@ class Phone:
                 continue
             size, mtime, path = int(parts[0]), float(parts[1]), parts[2]
             rel = path[len(root):].lstrip("/").split("/")
-            if any(p in SKIP_PARTS or p.startswith(".") for p in rel):
+            if only_trashed:
+                if not rel[-1].startswith(".trashed-") or any(p in SKIP_PARTS for p in rel[:-1]) or \
+                        any(p.startswith(".") for p in rel[:-1]):
+                    continue
+            elif any(p in SKIP_PARTS or p.startswith(".") for p in rel):
                 continue
             rows.append((path, size, mtime))
         return rows

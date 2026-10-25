@@ -154,3 +154,13 @@ def test_the_sha1sum_probe_matches_python():
     assert ph.can_hash()
     ph2 = Phone(runner=lambda args, timeout=0: (0, "NOSHA\n", ""))
     assert not ph2.can_hash()
+
+
+def test_the_bin_listing_takes_only_recently_deleted_files():
+    root = "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"
+    files = {f"{root}/IMG-1.jpg": 100, f"{root}/.trashed-1795517600-IMG-2.jpg": 50,
+             f"{root}/Private/.trashed-1-IMG-3.jpg": 70, f"{root}/Sent/.trashed-1795517600-IMG-4.jpg": 60}
+    ph = Phone(runner=FakeAdb(files))
+    names = sorted(p.rsplit("/", 1)[-1] for p, _, _ in ph.list_files(root, only_trashed=True))
+    assert names == [".trashed-1795517600-IMG-2.jpg", ".trashed-1795517600-IMG-4.jpg"]
+    assert [p.rsplit("/", 1)[-1] for p, _, _ in ph.list_files(root)] == ["IMG-1.jpg"]

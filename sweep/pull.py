@@ -25,13 +25,13 @@ def slug(path):
     return "_".join(x for x in str(path).strip("/").split("/") if x) or "root"
 
 
-def pull(con, phone, mirror, log=print, only=None):
+def pull(con, phone, mirror, log=print, only=None, only_trashed=False):
     mirror = Path(mirror)
     total_files = total_bytes = 0
     for label, root in phone.roots():
         if only and label not in only:
             continue
-        remote = phone.list_files(root)
+        remote = phone.list_files(root, only_trashed=True) if only_trashed else phone.list_files(root)
         base = mirror / label / slug(Path(root).parent)
         local_root = base / Path(root).name
 
@@ -49,7 +49,7 @@ def pull(con, phone, mirror, log=print, only=None):
                 f"(keeping {MARGIN / 1e9:.0f} GB spare). Free some space, or run with --only to pick folders.")
             continue
         failed = []
-        if missing and (len(missing) > 40 or len(missing) > len(remote) / 2):
+        if missing and not only_trashed and (len(missing) > 40 or len(missing) > len(remote) / 2):
             try:
                 phone.pull_dir(root, base)
             except Exception as e:   # one bad file stops adb's folder copy: copy the rest one by one
