@@ -6,7 +6,7 @@ import datetime as dt
 import re
 
 from . import checks, media
-from .wordlist import forward_words, has_words
+from .wordlist import document_words, forward_words, has_words
 
 FORWARD_KINDS = {"greeting", "quote", "meme", "news", "ad"}
 ARTICLE = {"greeting": "a greeting", "quote": "a quote", "meme": "a meme", "news": "forwarded news", "ad": "an ad"}
@@ -77,12 +77,22 @@ def _single(r, v, c, today, arrivals):
         if people is not False and people != 0:
             return ("check", f"Looks like {ARTICLE.get(kind, kind)}, but may have real people in it" +
                     (f": “{short(words, 40)}”" if words else ""), "P1-people-in-forward", None)
+        # Rule D1: anything that reads like a bill, receipt, order, ID, ticket or study question is kept, whatever
+        # the model called it.
+        if document_words(words):
+            return None
         what = "Forwarded video" if folder.startswith("wa_video") else f"Forwarded {kind}"
-        if has_words(words) and (forward_words(words) or kind in {"quote", "news", "ad", "meme"}):
+        # Rule P2: something you sent yourself is your choice, never a forward that arrived: shown, never ticked.
+        if folder in {"wa_sent", "wa_video_sent"}:
+            if has_words(words) and forward_words(words):
+                return ("check", f"You sent this; it looks like {ARTICLE.get(kind, kind)}: “{short(words, 50)}”",
+                        "P2-you-sent-it", None)
+            return None
+        if has_words(words) and forward_words(words):
             return ("forwards", f"{what}. It reads: “{short(words)}”", "F1-read-words", None)
         if arrivals.get(r["id"], 1) >= 2:
             return ("forwards", f"{what}, arrived {arrivals[r['id']]} times", "F2-arrived-again", None)
-        return None    # a forward it could not read, that came once: kept
+        return None    # a forward with no forward word that it read, and that came once: kept
 
     # Rule B1: a blurry or black photo (never a video: one frame says nothing about the rest), flagged by code,
     # confirmed by the model, with no people in it.

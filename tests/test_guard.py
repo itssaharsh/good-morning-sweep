@@ -136,3 +136,47 @@ def test_build_ignores_files_already_deleted_or_gone(con, tmp_path):
     con.execute("INSERT INTO deletions(file_id, ok, message, at) VALUES(?,1,'deleted',0)", (a,))
     con.commit()
     assert guard.build(con) == {}
+
+
+# --- found on the first real phone, 26 Oct: Gemma calls receipts, orders, IDs and study questions "ad" or "quote" ---
+
+def test_a_receipt_called_an_ad_is_never_ticked():
+    for words in ["Aliste Technologies Pvt. Ltd. Electricity Recharge", "1 x G Faad Pizza 1 x Dragon Fire Dip",
+                  "Aadhaar is a proof of identity, of citizenship", "Available for This Booking"]:
+        out = guard.decide([row(1, folder="wa_sent")], {1: v("ad", words)}, {})
+        assert 1 not in out or not guard.PRESELECT[out[1][0]], words
+
+
+def test_a_study_question_called_a_quote_is_never_ticked():
+    for words in ["If x = f(u,v) and u = x^2 - 2xy - y^2, prove", "What is the worst-case time complexity of Bubble Sort?"]:
+        out = guard.decide([row(1, folder="wa_sent")], {1: v("quote", words)}, {})
+        assert 1 not in out or not guard.PRESELECT[out[1][0]], words
+
+
+def test_an_ad_needs_a_forward_word_to_be_ticked():
+    out = guard.decide([row(1), row(2)], {1: v("ad", "MEGA SALE 70% OFF Diwali offer today only"),
+                                          2: v("ad", "Apple Pencil Pro OUT OF STOCK")}, {})
+    assert out[1][0] == "forwards" and 2 not in out
+
+
+def test_spam_words_count_as_forward_words():
+    out = guard.decide([row(1)], {1: v("ad", "500% JOINING BONUS SIGNUP NOW")}, {})
+    assert out[1][0] == "forwards"
+
+
+def test_what_you_sent_is_never_ticked():
+    """A birthday post you made for a friend is a greeting with words, but it is yours, not a forward."""
+    out = guard.decide([row(1, folder="wa_sent"), row(2, folder="wa_video_sent")],
+                       {1: v("greeting", "happy birthday girl thank you for all the laughs"),
+                        2: v("ad", "MEGA SALE 70% OFF")}, {})
+    assert out[1][0] == "check" and out[2][0] == "check" and "sent" in out[1][1]
+
+
+def test_a_letter_to_you_is_kept():
+    out = guard.decide([row(1)], {1: v("news", "Dear Sahil Congratulations! On behalf of the entire team")}, {})
+    assert out == {}
+
+
+def test_bank_and_card_pictures_are_kept():
+    for words in ["Axis Bank", "Visa SBI Debit Card Offer", "IRCTC does not share any links"]:
+        assert guard.decide([row(1)], {1: v("ad", words)}, {}) == {}, words
