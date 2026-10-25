@@ -173,7 +173,7 @@ def test_what_you_sent_is_never_ticked():
 
 
 def test_a_letter_to_you_is_kept():
-    out = guard.decide([row(1)], {1: v("news", "Dear Sahil Congratulations! On behalf of the entire team")}, {})
+    out = guard.decide([row(1)], {1: v("news", "Dear Asha Congratulations! On behalf of the entire team")}, {})
     assert out == {}
 
 
