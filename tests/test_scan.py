@@ -118,3 +118,16 @@ def test_camera_videos_are_not_sent_to_the_model(con, tmp_path):
     con.execute("INSERT INTO checks(file_id, blur, dark) VALUES(?, 1, 2)", (fid,))
     con.commit()
     assert scan.pending(con) == []
+
+
+def test_a_time_limit_stops_the_scan_and_the_next_run_carries_on(con, tmp_path, monkeypatch):
+    for i in range(3):
+        add(con, card(tmp_path / f"t{i}.jpg", seed=40 + i), "wa_images")
+    pull.index(con)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(scan.time, "time", lambda: clock["t"])
+    def slow(jpeg, url=None, log=None):
+        clock["t"] += 1800       # each picture takes half an hour
+        return dict(model.parse('{"kind":"photo","words":"","people":true,"screen":""}'), raw="{}", ms=1, error=None)
+    assert scan.run(con, classify=slow, log=lambda *a: None, hours=0.75) == 2
+    assert len(scan.pending(con)) == 1

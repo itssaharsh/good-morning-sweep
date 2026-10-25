@@ -63,7 +63,7 @@ def store(con, sha1, v, also=()):
     return len(ids)
 
 
-def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print, every=10):
+def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print, every=10, hours=None):
     todo = pending(con)
     if limit:
         todo = todo[:limit]
@@ -74,7 +74,11 @@ def run(con, limit=None, url=model.MODEL_URL, classify=model.classify, log=print
         return 0
     log(f"{total} pictures for Gemma to look at (biggest first). Stop any time; the next run continues.")
     t0, done, ms_sum = time.time(), 0, 0
+    stop_at = time.time() + hours * 3600 if hours else None
     for r in todo:
+        if stop_at and time.time() >= stop_at:
+            log(f"Time is up after {done} pictures; {total - done} left for the next run (biggest ones were first).")
+            break
         im = media.open_picture(r["local_path"], max_side=768)
         if im is None:
             v = {"kind": None, "words": "", "people": None, "screen": "", "raw": "", "ms": 0,

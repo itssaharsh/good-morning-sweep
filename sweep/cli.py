@@ -134,7 +134,7 @@ def cmd_scan(args):
         n = durable.run_sync(ws / "sweep.db", args.model_url, f"sweep-{ws.name}", address=args.temporal)
         print(f"Workflow finished: {n} pictures looked at.")
     else:
-        scan.run(con, limit=args.limit, url=args.model_url)
+        scan.run(con, limit=args.limit, url=args.model_url, hours=args.hours)
     guard.build(con)
     print(report.summary(con))
 
@@ -222,6 +222,7 @@ def main(argv=None):
     p.add_argument("--durable", action="store_true", help="run as a Temporal workflow that survives crashes")
     p.add_argument("--temporal", default="localhost:7233")
     p.add_argument("--retry-unsure", action="store_true", help="ask again about pictures that got an unreadable answer")
+    p.add_argument("--hours", type=float, help="stop after this many hours (the next run carries on)")
     p.set_defaults(f=cmd_scan)
     sub.add_parser("suggest").set_defaults(f=cmd_suggest)
     p = sub.add_parser("run"); p.add_argument("--only", nargs="*"); p.set_defaults(f=cmd_run)
