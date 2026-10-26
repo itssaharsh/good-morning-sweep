@@ -44,3 +44,13 @@ def test_pictures_never_scrolled_to_get_no_decision(con, tmp_path):
     acts = dict(con.execute("SELECT file_id, action FROM decisions").fetchall())
     assert acts == {a: "delete", b: "keep"}
     assert [i["sel"] for i in review.items(con) if i["id"] == c] == [True]   # still ticked for next time
+
+
+def test_label_sample_of_what_the_model_alone_would_delete(con, tmp_path):
+    from sweep import label
+    a = add(con, card(tmp_path / "a.jpg"), "wa_sent")
+    b = add(con, card(tmp_path / "b.jpg", seed=8), "wa_sent")
+    con.executemany("INSERT INTO verdicts(file_id, kind, words, people, screen) VALUES(?,?,?,?,?)",
+                    [(a, "ad", "Electricity Recharge", 0, ""), (b, "photo", "", 1, "")])
+    con.commit()
+    assert [i for i, _ in label.sample_alone(con, 10)] == [a]

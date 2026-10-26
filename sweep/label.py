@@ -31,6 +31,18 @@ load();
 </script></body></html>"""
 
 
+def sample_alone(con, n, seed=7):
+    """The pictures Gemma alone would delete (any forward kind or 'accidental'), in random order: labelling them says
+    how many of them a person wants to keep, which is what the rules are there to protect."""
+    rng = random.Random(seed)
+    ids = [r["file_id"] for r in con.execute(
+        "SELECT v.file_id FROM verdicts v JOIN files f ON f.id=v.file_id WHERE v.kind IN "
+        "('greeting','quote','meme','news','ad','accidental') AND f.folder != 'camera' ORDER BY v.file_id")]
+    ids = rng.sample(ids, min(n, len(ids)))
+    done = {r["file_id"]: r["label"] for r in con.execute("SELECT file_id, label FROM labels")}
+    return [[i, done.get(i)] for i in ids]
+
+
 def sample(con, n, seed=7):
     rng = random.Random(seed)
     sug = [r["file_id"] for r in con.execute("SELECT file_id FROM suggestions ORDER BY file_id")]
@@ -45,10 +57,10 @@ def sample(con, n, seed=7):
     return [[i, done.get(i)] for i in ids]
 
 
-def serve(con_factory, workspace, n=200, port=8766, seed=7, log=print):
+def serve(con_factory, workspace, n=200, port=8766, seed=7, log=print, alone=False):
     thumbs = Path(workspace) / "thumbs" / "l"
     con = con_factory()
-    ids = sample(con, n, seed)
+    ids = sample_alone(con, n, seed) if alone else sample(con, n, seed)
     con.close()
 
     class H(BaseHTTPRequestHandler):
@@ -56,6 +68,8 @@ def serve(con_factory, workspace, n=200, port=8766, seed=7, log=print):
             pass
 
         def do_GET(self):
+            if self.headers.get("Host", "") not in {f"127.0.0.1:{port}", f"localhost:{port}"}:
+                self.send_response(421); self.end_headers(); return
             path = urllib.parse.urlparse(self.path).path
             c = con_factory()
             try:
@@ -74,6 +88,8 @@ def serve(con_factory, workspace, n=200, port=8766, seed=7, log=print):
                 c.close()
 
         def do_POST(self):
+            if self.headers.get("Host", "") not in {f"127.0.0.1:{port}", f"localhost:{port}"}:
+                self.send_response(421); self.end_headers(); return
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             c = con_factory()
             try:

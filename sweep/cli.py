@@ -226,7 +226,7 @@ def cmd_label(args):
     from . import label
     con, ws, _ = open_db(args, args.serial)
     dbpath = ws / "sweep.db"
-    label.serve(lambda: db.connect(dbpath), ws, n=args.n, port=args.port, seed=args.seed)
+    label.serve(lambda: db.connect(dbpath), ws, n=args.n, port=args.port, seed=args.seed, alone=args.alone)
 
 
 def main(argv=None):
@@ -260,7 +260,9 @@ def main(argv=None):
     p = sub.add_parser("apply"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(f=cmd_apply)
     sub.add_parser("report").set_defaults(f=cmd_report)
     p = sub.add_parser("label"); p.add_argument("--n", type=int, default=200); p.add_argument("--port", type=int, default=8766)
-    p.add_argument("--seed", type=int, default=7); p.set_defaults(f=cmd_label)
+    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--alone", action="store_true", help="label the pictures Gemma alone would delete")
+    p.set_defaults(f=cmd_label)
     args = ap.parse_args(argv)
     args.f(args)
 
