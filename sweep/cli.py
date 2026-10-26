@@ -209,8 +209,12 @@ def cmd_apply(args):
     else:
         args.serial = args.serial or db.get_meta(con, "serial")
         ph, d = phone_or_exit(args)
+    if args.ticked:
+        from .apply import approve_ticked
+        print(f"Recorded delete for {approve_ticked(con)} ticked pictures not yet decided.")
     try:
-        print(apply_fn(con, ph, scratch_dir=db.get_meta(con, "mirror") or str(ws), dry_run=args.dry_run))
+        print(apply_fn(con, ph, scratch_dir=db.get_meta(con, "mirror") or str(ws), dry_run=args.dry_run,
+                       labels=args.labels))
     except (NotReviewed, WrongPhone) as e:
         sys.exit(str(e))
 
@@ -257,7 +261,10 @@ def main(argv=None):
     p.add_argument("--all-buckets", action="store_true", help="static only: every group, for a demo set with no family photos")
     p.add_argument("--note", help="static only: a line of HTML shown above the page")
     p.set_defaults(f=cmd_review)
-    p = sub.add_parser("apply"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(f=cmd_apply)
+    p = sub.add_parser("apply"); p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--labels", action="store_true", help="also delete every picture labelled junk on the label page")
+    p.add_argument("--ticked", action="store_true", help="also delete every ticked suggestion not yet decided")
+    p.set_defaults(f=cmd_apply)
     sub.add_parser("report").set_defaults(f=cmd_report)
     p = sub.add_parser("label"); p.add_argument("--n", type=int, default=200); p.add_argument("--port", type=int, default=8766)
     p.add_argument("--seed", type=int, default=7)

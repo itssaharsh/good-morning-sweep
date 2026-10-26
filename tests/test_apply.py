@@ -134,3 +134,24 @@ def test_a_phone_without_sha1sum_deletes_nothing(con, tmp_path):
     with pytest.raises(WrongPhone, match="sha1sum"):
         apply(con, ph, log=lambda *a: None)
     assert ph.deleted == []
+
+
+def test_labelled_junk_and_ticked_are_deleted_when_asked(con, tmp_path):
+    from sweep.apply import approve_ticked
+    (a, b), ph = setup(con, tmp_path)
+    c = add(con, card(tmp_path / "c.jpg", seed=12), "wa_sent")
+    pull.index(con)
+    ph.files[con.execute("SELECT phone_path FROM files WHERE id=?", (c,)).fetchone()[0]] = \
+        con.execute("SELECT sha1 FROM files WHERE id=?", (c,)).fetchone()[0]
+    con.execute("INSERT INTO labels(file_id, label, at) VALUES(?, 'junk', 0)", (c,)); con.commit()
+    review.save(con, [], keep_ids=[])            # the person saw nothing on the page
+    assert approve_ticked(con) == 2               # a and b were ticked
+    res = apply(con, ph, log=lambda *x: None, labels=True)
+    assert res["deleted"] == 3
+
+
+def test_labels_are_not_deleted_unless_asked(con, tmp_path):
+    (a, b), ph = setup(con, tmp_path)
+    con.execute("INSERT INTO labels(file_id, label, at) VALUES(?, 'junk', 0)", (a,)); con.commit()
+    review.save(con, [], keep_ids=[])
+    assert apply(con, ph, log=lambda *x: None)["deleted"] == 0

@@ -20,14 +20,32 @@ class WrongPhone(RuntimeError):
     pass
 
 
-def approved(con):
-    """The approved rows, with the reasons any of them must stay."""
-    return con.execute("""
+def approved(con, labels=False):
+    """The approved rows, with the reasons any of them must stay. labels=True adds every picture the person labelled
+    junk on the label page (an explicit decision of theirs, made one picture at a time)."""
+    rows = con.execute("""
         SELECT f.id, f.phone_path, f.local_path, f.bytes, f.sha1, s.keep_id, s.rule
         FROM decisions d JOIN files f ON f.id = d.file_id
         JOIN suggestions s ON s.file_id = d.file_id
         LEFT JOIN deletions x ON x.file_id = d.file_id
         WHERE d.action = 'delete' AND COALESCE(f.gone, 0) = 0 AND (x.ok IS NULL OR x.ok = 0)""").fetchall()
+    if labels:
+        seen = {r["id"] for r in rows}
+        rows += [r for r in con.execute("""
+            SELECT f.id, f.phone_path, f.local_path, f.bytes, f.sha1, NULL AS keep_id, 'L1-labelled-junk' AS rule
+            FROM labels l JOIN files f ON f.id = l.file_id
+            LEFT JOIN deletions x ON x.file_id = l.file_id
+            WHERE l.label = 'junk' AND COALESCE(f.gone, 0) = 0 AND (x.ok IS NULL OR x.ok = 0)""") if r["id"] not in seen]
+    return rows
+
+
+def approve_ticked(con):
+    """Record 'delete' for every ticked suggestion with no decision yet (the person said so outside the page)."""
+    with con:
+        n = con.execute("""INSERT INTO decisions(file_id, action, at) SELECT file_id, 'delete', ? FROM suggestions
+                           WHERE preselected = 1 AND file_id NOT IN (SELECT file_id FROM decisions)""", (now(),)).rowcount
+    set_meta(con, "review_saved_at", now())
+    return n
 
 
 def check_review(con):
@@ -39,7 +57,7 @@ def check_review(con):
         raise NotReviewed("The suggestions changed after the review was saved. Open the review page again.")
 
 
-def apply(con, phone, scratch_dir=None, log=print, dry_run=False):
+def apply(con, phone, scratch_dir=None, log=print, dry_run=False, labels=False):
     check_review(con)
     if not dry_run:
         want = get_meta(con, "serial")
@@ -48,7 +66,7 @@ def apply(con, phone, scratch_dir=None, log=print, dry_run=False):
         if getattr(phone, "serial", None) != want:
             raise WrongPhone(f"The connected phone ({getattr(phone, 'serial', None)}) is not the phone this review is "
                              f"for ({want}). Plug in the right phone.")
-    rows = approved(con)
+    rows = approved(con, labels=labels)
     ids = {r["id"] for r in rows}
     keep_paths = {}
     for k in {r["keep_id"] for r in rows if r["keep_id"]}:
