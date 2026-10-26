@@ -5,7 +5,7 @@ model (Gemma 4) that runs on the family laptop. It reads every picture before it
 deleted until a person has looked at the pile.**
 
 Built for the [Hacktoberfest Open-Source AI Challenge, Week 3: Slow and Steady](https://dev.to/challenges/hacktoberfest-week3-2026-10-19).
-The repository was started on 24 October 2026, inside the challenge window.
+The repository was started on 24 October 2026, inside the challenge window. The write-up: [Before Gemma touches my mom's phone, I raced it on mine](https://dev.to/saharsh7002/before-gemma-touches-my-moms-phone-i-raced-it-on-mine-35-minutes-deleting-good-morning-forwards-4km8).
 
 ## What it does
 
