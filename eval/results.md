@@ -1,6 +1,6 @@
 # The sweep against a person's own clean-up of the same phone
 
-Same phone, same night. The person deleted by hand first; the sweep then looked at the pictures they deleted (from the gallery's Recently deleted bin) and the ones they kept. Model and rules frozen before either set was scanned; each set scanned once.
+Same phone, same night. The person deleted by hand first; the sweep then looked at the pictures they deleted (from the gallery's Recently deleted bin) and the ones they kept. The model and its prompt were the same for both sets, and each set was scanned once. The rules changed once, after reading the kept set's suggestions (the first version ticked receipts, an ID notice and study questions there), so the kept set's rule numbers are after fixes found on that set. The deleted-by-hand set was scored after that, once, with the final rules.
 
 | | Pictures | Gemma alone would delete | Gemma + rules, ticked | Gemma + rules, shown at all |
 |---|---|---|---|---|
